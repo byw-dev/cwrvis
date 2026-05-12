@@ -97,32 +97,34 @@ cwrvis/
 
 ## 数据规模与文件组织
 
-### 格点 JSON 切片
+### 格点 JSON 文件
 
-- 空间范围：中国区域，1度网格，约 60×70 = 4200 格点
-- 时间颗粒度：年（2000–2024，共 25 份）、月（25年×12月，共 300 份）
-- 变量数量：约 40–50 个 `data_var`
-- 总切片数：约 16,250 个，总体积约 800MB
+每个文件包含**一个 var 在一种颗粒度下的全部时间步**，前端切换 var 时一次请求即可获取完整时间轴。
+
+- 空间范围：当前样例为西藏区域，1度网格，15×25 = 375 格点（完整数据集范围待确认）
+- 变量数量：当前 16 个 `data_var`
+- 总文件数：约 32 个（16 var × 2 颗粒度），总体积约 10MB
 
 **命名规则**：
 ```
-/static/grid/{granularity}/{var}/{year}.json          # 年颗粒度
-/static/grid/{granularity}/{var}/{year}_{month}.json  # 月颗粒度
+/static/grid/year/{var}.json    # 该 var 全部年份数据
+/static/grid/month/{var}.json   # 该 var 全部月份数据
 ```
 
 每个 JSON 文件的结构：
 ```json
 {
-  "var": "precipitation",
-  "year": 2010,
-  "month": null,
+  "var": "SP",
   "granularity": "year",
-  "lat_min": 18, "lat_max": 53,
-  "lon_min": 73, "lon_max": 135,
-  "lat_size": 36, "lon_size": 63,
-  "data": [[...], [...]]   // shape: lat_size × lon_size，NaN 用 null 表示
+  "lat_min": 25.5, "lat_max": 39.5,
+  "lon_min": 75.5, "lon_max": 99.5,
+  "lat_size": 15, "lon_size": 25,
+  "timeline": [2000, 2001, 2002, ...],          // 年颗粒度：年份数组
+  "frames": [[[...], [...]], [[...], [...]]]    // frames[i] 对应 timeline[i]，shape: lat_size × lon_size，NaN 用 null
 }
 ```
+
+月颗粒度 `timeline` 为对象数组：`[{"year": 2000, "month": 1}, ...]`
 
 ### SQLite 区域统计
 
@@ -141,7 +143,7 @@ CREATE TABLE region_stats (
 );
 ```
 
-预计行数约 16 万行，文件体积 < 20MB。
+预计行数约 2 万行，文件体积 < 5MB。
 
 ### 预生成报告
 
@@ -150,7 +152,7 @@ CREATE TABLE region_stats (
 命名规则（与甲方确认后固化）：
 ```
 {region_id}_{granularity}_{start}_{end}.docx
-# 示例：region_a_year_2000_2024.docx
+# 示例：region_a_year_2000_2025.docx
 #        region_b_month_2020_2023.docx
 ```
 
