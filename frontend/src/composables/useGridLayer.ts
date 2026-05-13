@@ -1,4 +1,4 @@
-import { watch, onUnmounted } from 'vue'
+import { watch, shallowRef, onUnmounted } from 'vue'
 import type { CanvasSource } from 'maplibre-gl'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
@@ -11,6 +11,9 @@ import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worke
 import type { AggMode } from '@/types'
 
 const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/grid'
+
+// 每次帧渲染完毕（applyBitmap）时递增，供外部 watch 数据就绪
+const renderTick = shallowRef(0)
 
 const GRAN_PATH: Record<AggMode, string> = {
   monthly:     'month',
@@ -163,6 +166,7 @@ export function useGridLayer() {
     // play() 调度 repaint；pause() 立即调用 prepare() 上传纹理到 GPU，repaint 时直接显示
     src.play()
     src.pause()
+    renderTick.value++
   }
 
   async function renderCurrent(): Promise<void> {
@@ -236,5 +240,5 @@ export function useGridLayer() {
 
   onUnmounted(() => { worker.terminate() })
 
-  return { renderCurrent, getValueAt, fetchFrames }
+  return { renderCurrent, getValueAt, fetchFrames, renderTick }
 }

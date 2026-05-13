@@ -12,8 +12,8 @@ import { isInGridBounds } from '@/utils/grid'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
 
-const { map }                     = useMap()
-const { getValueAt, fetchFrames } = useGridLayer()
+const { map }                               = useMap()
+const { getValueAt, fetchFrames, renderTick } = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
 
@@ -43,9 +43,10 @@ const pickedValue = ref<number | null>(null)
 const showHistory = ref(false)
 const gridData    = ref<Record<string, (number | null)[][][]>>({})
 
-// 时间帧或 var 变化时重算 hover 和 pick 的值
+// 每次帧渲染完毕（jsonCache 已更新）或时间帧切换后，重算 hover 和 pick 的值
+// 用 renderTick 而非 varStore.selVar，避免在新 var 数据加载前就读到 null
 watch(
-  [() => timeStore.currentIndex, () => timeStore.mode, () => varStore.selVar],
+  [renderTick, () => timeStore.currentIndex, () => timeStore.mode],
   () => {
     if (hover.value) {
       hover.value = { ...hover.value, value: getValueAt(hover.value.lat, hover.value.lng) }
