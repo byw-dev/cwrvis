@@ -1,48 +1,73 @@
 # Phase 1 — MVP 任务清单
 
-**目标**：完成可演示、满足验收的最小可用版本
-**时间**：第一阶段
-**验收标准**：见 `CLAUDE.md` → "第一阶段验收标准"
+**目标**：完成可演示、满足甲方验收的最小可用版本  
+**验收标准**：见 [`TASK_LIST.md`](../../TASK_LIST.md) → "验收标准"节  
+**工时标记**：`[S]` ≤半天  `[M]` 约1天  `[L]` 2–3天  
+**依赖标记**：`← needs: X-NN` 表示必须在该任务完成后才能开始
+
+---
+
+## 关键路径
+
+```
+F-01 → F-02 → F-04 → F-05 → F-06
+     → F-03 ↗
+     → F-08 → F-10 → F-11 → F-12
+     → F-09 ↗        ↓       ↓
+                     F-13   F-14 → F-15 → F-16
+```
+
+最长链：F-01 → F-08/F-09 → F-10 → F-11 → F-13 ≈ 11天  
+可并行：后端 B 系列 与前端 F 系列完全独立，可同步推进。
 
 ---
 
 ## S — Scripts / 数据预生成脚本
 
-- [x] `DONE` **S-01** netcdf_to_json.py：生成 5 种颗粒度格点 JSON
-  - year/{var}.json（26 帧）、month/{var}.json（312 帧）
-  - mean_all/{var}.json（1 帧）、mean_month/{var}.json（12 帧）、mean_season/{var}.json（4 帧）
-  - 含 meta.json（网格坐标、dxy、时间轴、var 元数据）
-  - 支持 kg→mm 换算辅助变量 dxy 导出
+- [x] `DONE` **S-01** `[M]` netcdf_to_json.py：生成格点 JSON 全套文件
+  - `year/{var}.json`（26帧）、`month/{var}.json`（312帧）
+  - `mean_all/{var}.json`（1帧）、`mean_month/{var}.json`（12帧）、`mean_season/{var}.json`（4帧）
+  - `meta.json`：网格坐标、`dxy`（m²，用于 kg→mm 换算）、时间轴、var 元数据
+  - 输出：`static/grid/`（已 `.gitignore`，需在目标机器运行）
 
-- [ ] `TODO` **S-02** netcdf_to_sqlite.py：生成区域统计 SQLite
-  - 对每个 region × granularity × var 计算区域统计值写入 region_stats 表
-  - `BLOCKED` ← 等待甲方提供 netcdf 原始数据 + 确认区域 shape 坐标系
+- [ ] `BLOCKED` **S-02** `[M]` netcdf_to_sqlite.py：生成区域统计 SQLite
+  - 对每个 region × granularity（year/month）× var 计算区域均值，写入 `region_stats` 表
+  - SQLite 主键：`(region_id, granularity, year, month, var)`
+  - 输出：`db/stats.db`
+  - **阻塞原因**：等待甲方提供 netcdf 原始数据；等待确认区域 shape 坐标系
 
-- [ ] `TODO` **S-03** shapes 文件处理：中文文件名 → region_id 命名
-  - 将 `data/shapes/西藏自治区.geojson` 等复制为 `static/shapes/xizang.geojson` 等
-  - 可做成 Makefile 规则或独立 shell 脚本，集成到打包流程
+- [ ] `TODO` **S-03** `[S]` shapes 处理：中文文件名 → region_id 命名
+  - `data/shapes/西藏自治区.geojson` → `static/shapes/xizang.geojson`（及其余 7 个地市）
+  - region_id 映射见 `backend/config.py` 的 `REGION_MAP`
+  - 实现为 shell 脚本或 Makefile 规则，集成到打包流程（D-01 依赖此项）
 
 ---
 
 ## B — Backend / 后端 API
 
-- [ ] `TODO` **B-01** FastAPI 入口（`backend/main.py`）完善
-  - 挂载路由：stats / report / meta
-  - StaticFiles 挂载：`/grid` → grid_dir、`/shapes` → shapes_dir、`/` → 前端 build 产物
-  - CORS 配置（开发阶段）
+> B 系列与前端 F 系列独立，可与 F-01~F-10 并行推进。
 
-- [ ] `TODO` **B-02** `/api/v1/stats` 接口（`routers/stats.py`）
-  - 参数校验：region_id、granularity（year/month）、year_start/end（2000–2025）、var（可多值）
-  - SQLite 查询，返回统一响应结构
-  - 错误处理：region_id 不存在 → 404，参数非法 → 400
+- [ ] `TODO` **B-01** `[S]` FastAPI 入口完善（`backend/main.py`）
+  - 挂载路由：`/api/v1/stats`、`/api/v1/report`、`/api/v1/meta`
+  - StaticFiles 挂载：`/grid` → `GRID_DIR`、`/shapes` → `SHAPES_DIR`、`/` → 前端 build 产物
+  - 开发阶段 CORS 配置（允许 localhost:5173）
+  - `backend/config.py`：`REGION_MAP` 定义（8 个区域的 id→中文名映射）
 
-- [ ] `TODO` **B-03** `/api/v1/report/download` 接口（`routers/report.py`）
-  - 按命名规则拼接文件路径，检查存在性，返回文件流
-  - 404 时返回 JSON 错误体
+- [ ] `TODO` **B-02** `[S]` `/api/v1/stats` 接口（`routers/stats.py`）
+  - 参数：`region_id`、`granularity`（year/month）、`year_start`、`year_end`（2000–2025）、`var`（可重复）
+  - SQLite 查询，结果按 `{ vars: { [var]: [{year, month, value}] } }` 结构返回
+  - 参数校验：region_id 不存在 → 404；参数非法 → 400
+  - `← needs: B-01`，需要 `stats.db`（若 S-02 未完成可用空数据库开发接口骨架）
 
-- [ ] `TODO` **B-04** `/api/v1/meta/regions` 接口（`routers/meta.py`）
-  - 从 config.py 中的 REGION_MAP 硬编码返回区域列表（id、name、level）
+- [ ] `TODO` **B-03** `[S]` `/api/v1/report/download` 接口（`routers/report.py`）
+  - 按 `{region_id}_{granularity}_{start}_{end}.docx` 拼接路径，`FileResponse` 返回
+  - 文件不存在 → 404 JSON；路径穿越校验（只允许访问 `REPORT_DIR` 内文件）
+  - `← needs: B-01`
+
+- [ ] `TODO` **B-04** `[S]` `/api/v1/meta/regions` 接口（`routers/meta.py`）
+  - 从 `REGION_MAP` 硬编码返回区域列表（`region_id`、`name`、`level`）
   - 无数据库查询
+  - `← needs: B-01`
 
 ---
 
@@ -50,152 +75,196 @@
 
 ### 基础设施
 
-- [ ] `TODO` **F-01** 项目初始化
-  - Vue 3 + TypeScript + Vite（pnpm，corepack 管理）
-  - 依赖：MapLibre GL JS ≥4.0、ECharts ≥5.5、Pinia ≥2.0
-  - `types/index.ts`：VarName、RegionId、AggMode、FrameSel、BasemapId 等公共类型
-  - `tsconfig.json` 严格模式，确保 `pnpm tsc --noEmit` 可通过
+- [ ] `TODO` **F-01** `[M]` 项目初始化
+  - `pnpm create vue@latest`，选 TypeScript + Vite；`.nvmrc` 固化 Node v24.15.0
+  - 安装：`maplibre-gl` ≥4.0、`echarts` ≥5.5、`pinia` ≥2.0
+  - `tsconfig.json` 严格模式（`strict: true`，`noUncheckedIndexedAccess: true`）
+  - `types/index.ts`：VarName、RegionId、AggMode、Season、FrameSel、BasemapId 等
+  - Vite dev proxy：`/api` → `http://localhost:8000/api`、`/grid` → `http://localhost:8000/grid`
 
-- [ ] `TODO` **F-02** 全局样式与设计系统
-  - CSS 变量（`--bg-*`、`--fg-*`、`--accent`、`--font-ui/mono`、`--h-nav/sub/bottom`、`--w-rail`）
-  - 基础 reset，MapLibre 样式覆盖，自定义滚动条
+- [ ] `TODO` **F-02** `[S]` 全局样式与设计系统
+  - `styles/variables.css`：所有 CSS 变量（`--bg-*`、`--fg-*`、`--accent`、`--font-*`、布局尺寸）
+  - 全局 reset，MapLibre 样式覆盖（去圆角、深色控件），自定义滚动条
+  - `← needs: F-01`
 
-- [ ] `TODO` **F-03** Pinia stores 骨架
-  - `stores/time.ts`：AggMode + FrameSel + playing
-  - `stores/var.ts`：selVar
-  - `stores/region.ts`：selRegionId + regions + statsCache
-  - `stores/meta.ts`：GridMeta（从 /grid/meta.json 加载）
-  - `stores/settings.ts`：localStorage 持久化，SCHEMA.md 中定义的所有 key
-  - `config/vars.ts`：15 个 var 的元数据与色卡控制点
-  - `config/basemaps.ts`：4 种底图配置
-  - `config/constants.ts`：YEAR_MIN/MAX、SEASONS 定义
+- [ ] `TODO` **F-03** `[M]` Pinia stores + 配置文件骨架
+  - `stores/time.ts`：`mode: AggMode`、`sel: FrameSel`、`playing: boolean`
+  - `stores/var.ts`：`selVar: VarName`
+  - `stores/region.ts`：`selRegionId: RegionId`、`regions: RegionMeta[]`、`statsCache: Map`
+  - `stores/meta.ts`：启动时 fetch `/grid/meta.json`，存储 GridMeta
+  - `stores/settings.ts`：从 localStorage 初始化，写入时同步持久化（见 DECISIONS.md DEC-011）
+  - `config/vars.ts`：15 个 var 元数据（`long_name`、`units`、色卡控制点、量程 vmin/vmax）
+  - `config/basemaps.ts`：4 种底图配置（见 DECISIONS.md DEC-004）
+  - `config/constants.ts`：`YEAR_MIN=2000`、`YEAR_MAX=2025`、`SEASONS` 定义（春MAM/夏JJA/秋SON/冬DJF）
+  - `← needs: F-01`
 
 ### 布局 Chrome
 
-- [ ] `TODO` **F-04** ProductNav 组件
-  - 7 个 Tab（含激活态 accent 底线）
-  - 右端：帮助占位 + ⚙ 入口 + 用户标识
-  - 品牌标识（五边形 SVG + 文字）
-  - 切换 Tab 时渲染对应模块
+- [ ] `TODO` **F-04** `[S]` ProductNav 组件
+  - 7 个 Tab，激活态：accent 色文字 + 底部 2px accent 线
+  - 右端：`?` 占位 + `⚙` 打开 SettingsPanel + 用户标识"研究员"
+  - 品牌：五边形 SVG（clip-path）+ "云水资源数据平台" + 副标题
+  - Tab 切换驱动 `App.vue` 渲染对应模块组件
+  - `← needs: F-02`
 
-- [ ] `TODO` **F-05** LeftRail + CategoryFlyout 组件
-  - 5 个变量分组图标（自绘 SVG）+ 搜索 + 导出（占位）
-  - 点击 → 飞出 260px 面板，含搜索框 + 变量列表
-  - 当前选中变量所属分组图标激活态
-  - 仅在 grid / region 模块显示
+- [ ] `TODO` **F-05** `[M]` LeftRail + CategoryFlyout 组件
+  - 5 个分组图标（自绘 SVG inline，22×22，currentColor）+ 搜索 + 导出占位
+  - 点击图标 → 弹出 260px 宽 CategoryFlyout，含搜索框 + 变量列表（code / long_name / units）
+  - 当前 selVar 所属分组图标始终激活（即使 Flyout 已关闭）
+  - 点击变量 → 更新 selVar → 关闭 Flyout
+  - 仅在 `grid` / `region` 模块显示
+  - `← needs: F-03`
 
-- [ ] `TODO` **F-06** SubToolbar 组件（三种模式）
-  - 格点数据：变量选择器下拉（VarDropdown）+ 聚合模式两组按钮 + 模式参数动态区域
-  - 区域统计：继承格点数据，追加区域选择器（RegionPicker）
-  - 数据导出：区域选择器 + 年份下拉
+- [ ] `TODO` **F-06** `[M]` SubToolbar 组件（三种形态）
+  - **grid 形态**：VarDropdown（点击展开，按分组列出所有 var）+ 两组聚合模式按钮（原始/统计）+ 右侧模式参数（随 mode 动态变化）
+  - **region 形态**：继承 grid，在聚合模式右侧追加 RegionPicker（下拉，支持全区 + 各地市分组）；与地图点击双向联动
+  - **export 形态**：RegionPicker + 年份下拉（全部/2000–2025）
+  - `← needs: F-03, F-05`
 
-- [ ] `TODO` **F-07** BottomBar 时间轴组件
-  - 5 种聚合模式各自的帧序列生成逻辑
-  - 播放/暂停（setInterval 驱动，不用 rAF）
-  - 速度控制（0.5×/1×/2×/4×），按模式持久化到 localStorage
-  - 刻度轨道（major/minor tick，当前帧游标）
-  - 键盘快捷键：← → Space
-  - 年平均（1 帧）时隐藏播放控件，显示静态提示
+- [ ] `TODO` **F-07** `[L]` BottomBar 时间轴组件
+  - 5 种模式各自的帧序列生成（312 / 26 / 12 / 4 / 1 帧）
+  - 控件：`[◀ 上一帧] [▶/⏸ 播放] [▶ 下一帧]` + MODE 标签 + FRAME 显示 + 速度选择器
+  - 播放：setInterval 驱动（见 DEC-010），速度按模式持久化（见 DEC-011）
+  - 刻度轨道：major/minor tick，点击/拖拽跳帧，当前帧游标
+  - 键盘：← → Space（输入框获焦时失效）
+  - 年平均（1帧）：隐藏播放控件，显示"静态帧"提示
+  - `← needs: F-03`
 
 ### 地图与格点渲染
 
-- [ ] `TODO` **F-08** MapView 组件（MapLibre 初始化）
-  - `composables/useMap.ts`：地图实例管理、底图切换（updateSource）
-  - 初始视野：西藏区域（lon 75–100, lat 25–40），zoom ~5
-  - 响应 settings.basemap 变化实时切换底图
+- [ ] `TODO` **F-08** `[S]` MapView 组件（MapLibre 初始化）
+  - `composables/useMap.ts`：创建 MapLibre Map 实例，初始视野西藏区域（zoom ~5）
+  - 底图切换：响应 `settings.basemap` 变化，调用 `map.getSource('basemap').setTiles()`
+  - 预留 ImageSource slot（`grid-overlay`）供 useGridLayer 使用
+  - `← needs: F-02, F-03`
 
-- [ ] `TODO` **F-09** Web Worker（`workers/gridRenderer.worker.ts`）
-  - 接收：`frame2d: (number|null)[][]`、colormap、threshMin/Max、targetW/H
-  - 双线性插值（15×25 → 600×400）
-  - 256-LUT 色卡映射 + 阈值过滤
-  - 返回：`ImageBitmap`（Transferable）
+- [ ] `TODO` **F-09** `[M]` Web Worker（`workers/gridRenderer.worker.ts`）
+  - 消息入参：`{ frame2d: (number|null)[][], colormap: string, lut: Uint8ClampedArray, threshMin: number, threshMax: number, targetW: number, targetH: number }`
+  - 步骤：双线性插值（15×25 → targetW×targetH）→ LUT 色卡查表 → 阈值过滤（null 或超出范围 → alpha=0）→ `createImageBitmap`
+  - 返回：`{ imageBitmap: ImageBitmap }` via `postMessage(msg, [imageBitmap])`（Transferable）
+  - LUT 由主线程预计算（256步 RGBA，见 DEC-013），Worker 只做查表
+  - `← needs: F-01`
 
-- [ ] `TODO` **F-10** useGridLayer composable
-  - fetch `/grid/{gran}/{var}.json`，解析，按帧索引提取二维数组
-  - 调用 Worker 渲染，收到 ImageBitmap 后更新 MapLibre ImageSource
-  - 帧缓存（LRU 20 帧），预加载 ±2 帧
-  - 响应 selVar / mode / sel / colormap 变化自动更新
+- [ ] `TODO` **F-10** `[L]` useGridLayer composable
+  - fetch `/grid/{gran}/{var}.json`，解析，缓存全量数据（内存）
+  - 按 `sel` 提取当前帧二维数组 → postMessage 给 Worker → 收到 ImageBitmap → 更新 MapLibre ImageSource
+  - LRU 帧缓存（20帧 ImageBitmap），预加载 ±2 帧
+  - 响应 `selVar`、`mode`、`sel`、`colormap`、`threshMin/Max` 变化自动重渲
+  - `← needs: F-08, F-09`
 
 ### 格点数据模块
 
-- [ ] `TODO` **F-11** GridModule 容器 + 地图交互
-  - `HoverTooltip.vue`：跟随鼠标 tooltip，显示插值数值（pointer-events: none）
-  - `PinTip.vue`：取值点气泡，绑定地图投影坐标，随帧更新数值，[查看历史] 入口
-  - 十字光标标记（MapLibre Marker 或自定义 DOM）
-  - Escape 清除取值点
+- [ ] `TODO` **F-11** `[M]` GridModule 容器 + 地图取值点交互
+  - `HoverTooltip.vue`：跟随鼠标，显示双线性插值数值 + 单位（`pointer-events: none`，绝对定位）
+  - `PinTip.vue`：固定取值点气泡，绑定地图投影坐标，随时间轴切帧自动重新插值更新数值；含 [查看历史 ↗] 和 [✕ 清除] 按钮
+  - 十字光标 Marker（4px 描边圆 + 十字线，SVG 实现）
+  - Escape 键清除取值点；地图拖拽时 PinTip 跟随
+  - `← needs: F-10`
 
-- [ ] `TODO` **F-12** Legend + Inspector 面板（Right Stack）
-  - `Legend.vue`：色标条（canvas 渲染）+ MIN/MEAN/MAX + Colormap 选择器（5 个，按 var 持久化）
-  - `Inspector.vue`：格点模式（坐标/时间/数值/分位条）；区域模式（区域名/时间/数值）
-  - 面板位置（左/右）响应 settings.legendPosition
+- [ ] `TODO` **F-12** `[M]` Legend + Inspector 面板（Right Stack）
+  - `Legend.vue`：
+    - 变量名 + long_name + unit + 插值方法说明
+    - MIN / MEAN / MAX 统计卡（当前帧全域）
+    - 色标条（canvas 渲染渐变）+ 量程刻度
+    - Colormap 选择器：5 个色带方块（Viridis/Turbo/Magma/Cyan/RdBu），按 var 持久化
+    - **阈值控制**：min/max 两个数值输入框（或拖拽手柄），写入 `threshMin/Max` → 触发 Worker 重渲（验收标准要求，见 DEC-013 / F-09）
+  - `Inspector.vue`：
+    - 格点模式：坐标 / 时间 / 变量名 / 大字数值 + 单位 / 分位条（相对当前帧 min/max）/ [查看历史] [清除]
+    - 区域模式：区域名 / 时间 / 变量名 / 区域统计数值 / [查看历史] [清除]
+  - 面板位置（左/右）响应 `settings.legendPosition`
+  - `← needs: F-10`
 
-- [ ] `TODO` **F-13** HistoryModal（格点数据模式）
-  - 4 个 Tab：逐月 / 逐年 / 多年月均 / 多年季均
-  - 数据来源：从已加载的格点 JSON 对 picked 点做双线性插值（纯前端计算）
-  - ECharts 折线图：当前帧橙色竖线高亮，悬停 tooltip，点击跳帧（关闭 Modal）
-  - 统计卡片：帧数 / MIN / MEAN / MAX / 极值时刻
+- [ ] `TODO` **F-13** `[M]` HistoryModal（格点数据模式）
+  - 4 个 Tab：逐月（312帧）/ 逐年（26帧）/ 多年月均（12帧）/ 多年季均（4帧）
+  - **数据来源**：纯前端，从已加载的格点 JSON 对 `picked.{lat, lon}` 做双线性插值；按需 fetch 尚未加载的 JSON（见 DEC-012 类比逻辑）
+  - ECharts 折线图（深色主题配置，背景 `--bg-1`，线色 `--accent`）：
+    - 当前帧：`--warn` 色竖线高亮
+    - 悬停：ECharts tooltip（时间 + 数值）
+    - 点击某帧 → 更新 `stores/time.sel` → 关闭 Modal
+  - 统计卡片（图表上方）：帧数 / MIN / MEAN / MAX / 极值时刻
+  - Modal 尺寸：880×560，全屏半透明遮罩 + backdrop-blur
+  - `← needs: F-11`
 
 ### 区域统计模块
 
-- [ ] `TODO` **F-14** useRegionLayer composable
-  - 加载 `/shapes/{region_id}.geojson`（按坐标系修正，见 frontend.md）
-  - MapLibre FillLayer + LineLayer（西藏轮廓 / 地市边界 / 悬停 / 选中四个状态）
-  - hover feature-state 驱动悬停高亮
-  - 响应 selRegionId 更新选中高亮
+- [ ] `TODO` **F-14** `[M]` useRegionLayer composable
+  - 加载所有区域的 GeoJSON（`/shapes/{region_id}.geojson`，并行 fetch）
+  - 坐标系修正：若底图为 GCJ-02 则不处理；若为 WGS-84 则整体偏移（见 DEC-005）
+  - MapLibre Source + 两个 Layer：FillLayer（透明度由 feature-state 驱动）+ LineLayer（边界线）
+  - 四种视觉状态（见 `docs/design/frontend.md` 区域高亮表）：轮廓 / 地市边界 / 悬停 / 选中
+  - 响应 `selRegionId` 变化更新 feature-state
+  - `← needs: F-08`
 
-- [ ] `TODO` **F-15** RegionModule 容器 + 区域交互
-  - 地图点击事件 → 判断命中地市 → 更新 selRegionId → 联动 SubToolbar 区域选择器
-  - 悬停 tooltip：地市名 + 当前统计数值（从 statsCache 读取）
-  - 进入模块时加载当前 region + var 的 year & month 全量 stats 数据
+- [ ] `TODO` **F-15** `[M]` RegionModule 容器 + 区域交互
+  - 进入模块时：加载当前 `selRegionId` + `selVar` 的 year & month 全量 stats 数据（两个并行请求）
+  - `selRegionId` 或 `selVar` 变化时：重新加载 stats 数据（先查 statsCache，命中则跳过请求）
+  - 地图 click 事件：命中地市 → 更新 `selRegionId` → 联动 SubToolbar RegionPicker
+  - 地图 hover 事件：命中地市 → feature-state 悬停高亮 + HoverTooltip（地市名 + 当前统计数值）
+  - 区域外点击：无响应
+  - `← needs: F-06, F-14, F-03`
 
-- [ ] `TODO` **F-16** HistoryModal（区域统计模式）
-  - 数据来源：`/api/v1/stats`（后端 SQLite）
-  - 4 个 Tab：逐月 / 逐年 / 月平均（客户端计算）/ 季平均（客户端计算）
-  - ECharts 折线图，多变量叠加：默认当前 var，可追加其他 var（各自发请求后追加折线）
-  - 多 Y 轴：同单位共轴，不同单位右侧增轴
-  - 当前帧橙色竖线，点击跳帧
+- [ ] `TODO` **F-16** `[L]` HistoryModal（区域统计模式）
+  - **数据来源**：`/api/v1/stats`（后端 SQLite），statsCache 中有则复用
+  - 4 个 Tab：逐月（312帧）/ 逐年（26帧）/ 月平均（12帧，客户端计算）/ 季平均（4帧，客户端计算）
+  - ECharts 折线图，**多变量叠加**：
+    - 默认加载 `selVar` 数据
+    - "+ 添加变量"按钮 → VarPicker → 发起请求 → 追加折线（不同颜色）
+    - 同单位：共用一条 Y 轴；不同单位：增加右侧 Y 轴（最多 2 条）
+    - 图例可点击显示/隐藏各变量
+  - 当前帧 `--warn` 色竖线，点击跳帧（同格点模式）
+  - 统计卡片（每个激活变量独立一组）
+  - `← needs: F-15`
 
 ### 其余模块
 
-- [ ] `TODO` **F-17** ExportModule（数据导出）
-  - 区域选择器 + 年份下拉（全部/2000–2025）
-  - 点击下载 → `GET /api/v1/report/download?...` → 浏览器触发下载
-  - 404 时页面内错误提示
+- [ ] `TODO` **F-17** `[S]` ExportModule（数据导出）
+  - 居中卡片布局；RegionPicker（复用 F-06 中的同名组件）+ 年份下拉
+  - 下载：构造 URL → `<a href download>` 触发；后端 404 → 页面内行内错误提示
+  - `← needs: F-06`
 
-- [ ] `TODO` **F-18** SettingsPanel（用户设置）
-  - overlay 面板（ProductNav ⚙ 打开）
-  - 底图选择（4 个 radio）
-  - 图例位置（左/右 radio）
-  - "恢复默认值"按钮（清除所有 `cwrvis:` localStorage key → reload）
+- [ ] `TODO` **F-18** `[S]` SettingsPanel（用户设置）
+  - Overlay 面板（点击遮罩关闭）
+  - 底图选择：4 个 radio，选中立即生效（`settings.basemap` → `useMap` 响应）
+  - 图例位置：左/右 radio
+  - "恢复默认值"按钮：清除所有 `cwrvis:` localStorage key → `window.location.reload()`
+  - `← needs: F-03, F-04`
 
-- [ ] `TODO` **F-19** PlaceholderModule（占位模块）
-  - 总览 / 时序分析 / 站点观测 / 模式诊断 共用同一个占位组件
-  - 显示模块名 + "该模块正在建设中"
+- [ ] `TODO` **F-19** `[S]` PlaceholderModule（占位模块）
+  - 总览 / 时序分析 / 站点观测 / 模式诊断共用
+  - 显示模块编号 + 名称 + "该模块正在建设中"，风格与主题一致
+  - `← needs: F-02`
 
 ---
 
 ## D — Deploy / 部署与运维
 
-- [ ] `TODO` **D-01** 分发包目录结构与打包脚本
-  - 定义 `cwrvis-{version}/` 结构（bin/、app/、static/、db/、conf/、logs/）
-  - `bin/start.sh`：启动 uvicorn，读取 conf/config.env
-  - `bin/stop.sh`：graceful stop
-  - 打包脚本：前端 build → dist/ 复制到 static/web/；shapes 重命名
+- [ ] `TODO` **D-01** `[M]` 分发包结构与打包脚本
+  - 目录：`cwrvis-{version}/bin/`、`app/`、`static/{grid,web,shapes,reports}/`、`db/`、`conf/`、`logs/`
+  - `bin/start.sh`：检查 `.venv`，`source conf/config.env`，启动 uvicorn（2 workers）
+  - `bin/stop.sh`：`pkill -f uvicorn`（或读 PID 文件 graceful stop）
+  - 打包脚本：① 前端 `pnpm build` → `static/web/`；② S-03 shapes 重命名 → `static/shapes/`；③ `uv pip install` 到 `app/.venv`
+  - `← needs: S-03, B-01~B-04, F-01~F-19`
 
-- [ ] `TODO` **D-02** systemd service 配置更新
-  - `deploy/systemd/cwrvis.service`：WorkingDirectory、ExecStart、Restart 策略
+- [ ] `TODO` **D-02** `[S]` systemd service 配置
+  - `deploy/systemd/cwrvis.service`：`WorkingDirectory`、`ExecStart`（绝对路径 `bin/start.sh`）、`Restart=on-failure`、`RestartSec=5`
+  - `← needs: D-01`
 
-- [ ] `TODO` **D-03** Nginx 配置（可选，用于反代或纯静态 + 代理分离）
-  - 配置模板，记录在 deployment.md
+- [ ] `TODO` **D-03** `[S]` 网络配置说明（`docs/design/deployment.md` 更新）
+  - 直连方案：uvicorn 直接监听 0.0.0.0:8000，无 Nginx
+  - 可选 Nginx 反代：upstream 配置模板，静态文件 `/grid/` 走 Nginx 直出
+  - HTTPS：Let's Encrypt certbot 配置示例
+  - `← needs: D-01`（配置编写不依赖，但测试依赖 D-01）
 
 ---
 
-## 统计
+## 进度统计
 
-| 模块 | 总计 | DONE | IN_PROGRESS | TODO | BLOCKED |
-|------|------|------|-------------|------|---------|
-| S（脚本） | 3 | 1 | 0 | 1 | 1 |
-| B（后端） | 4 | 0 | 0 | 4 | 0 |
-| F（前端） | 19 | 0 | 0 | 19 | 0 |
-| D（部署） | 3 | 0 | 0 | 3 | 0 |
+| 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
+|------|:----:|:-------:|:--------------:|:-------:|:----------:|
+| S 脚本 | 3 | 1 | 0 | 1 | 1 |
+| B 后端 | 4 | 0 | 0 | 4 | 0 |
+| F 前端 | 19 | 0 | 0 | 19 | 0 |
+| D 部署 | 3 | 0 | 0 | 3 | 0 |
 | **合计** | **29** | **1** | **0** | **27** | **1** |
+
+**预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）
