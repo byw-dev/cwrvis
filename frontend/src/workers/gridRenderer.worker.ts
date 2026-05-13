@@ -11,16 +11,18 @@ export interface RenderRequest {
   threshMax: number             // 阈值过滤上限（高于此值 → alpha=0）
   targetW: number               // 目标画布宽度（像素）
   targetH: number               // 目标画布高度（像素）
+  frameKey: string              // 主线程传入，原样回传，用于缓存匹配
 }
 
 export interface RenderResponse {
   imageBitmap: ImageBitmap
+  frameKey: string
 }
 
 // ─── Worker 主逻辑 ────────────────────────────────────────────────────────────
 
 self.onmessage = async (e: MessageEvent<RenderRequest>) => {
-  const { frame2d, lut, vmin, vmax, threshMin, threshMax, targetW, targetH } = e.data
+  const { frame2d, lut, vmin, vmax, threshMin, threshMax, targetW, targetH, frameKey } = e.data
 
   const nLat = frame2d.length
   const nLon = frame2d[0]?.length ?? 0
@@ -100,7 +102,7 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
   const imageBitmap = await createImageBitmap(canvas)
 
   ;(self as DedicatedWorkerGlobalScope).postMessage(
-    { imageBitmap } satisfies RenderResponse,
+    { imageBitmap, frameKey } satisfies RenderResponse,
     [imageBitmap],
   )
 }
