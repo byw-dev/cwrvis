@@ -7,6 +7,7 @@ import MapView from '@/components/map/MapView.vue'
 import SubToolbar from '@/components/layout/SubToolbar.vue'
 import LeftRail from '@/components/layout/LeftRail.vue'
 import GridModule from '@/components/modules/GridModule.vue'
+import RegionModule from '@/components/modules/RegionModule.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
@@ -48,7 +49,8 @@ const showMap = computed(() =>
     <LeftRail v-if="showMap" />
 
     <!-- 模块内容层 -->
-    <GridModule v-if="activeModule === 'grid'" />
+    <GridModule   v-if="activeModule === 'grid'" />
+    <RegionModule v-else-if="activeModule === 'region'" />
     <PlaceholderModule v-else-if="!showMap" :module-id="activeModule" />
 
     <BottomBar v-if="showBottomBar" />

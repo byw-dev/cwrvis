@@ -99,24 +99,7 @@ export interface GridMeta {
 }
 
 // ─── Region stats (from /api/v1/stats) ───────────────────────────────────────
-
-export interface StatRow {
-  year: number
-  month: number | null
-  value: number | null
-}
-
-export interface StatsResponse {
-  region_id: RegionId
-  granularity: 'year' | 'month'
-  vars: Partial<Record<VarName, StatRow[]>>
-}
-
-// Cached data for one region × one var (both granularities)
-export interface RegionStatsCache {
-  year: StatRow[]
-  month: StatRow[]
-}
+// Wide-schema response: see stores/region.ts for StatsRow / StatsApiData
 
 // ─── Picked point (grid mode) ────────────────────────────────────────────────
 
