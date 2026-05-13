@@ -13,6 +13,10 @@ const CMAPS: ColormapName[] = ['turbo', 'viridis', 'magma', 'cyan', 'rdbu']
 
 const vm      = computed(() => VARS[varStore.selVar])
 const cmName  = computed(() => settings.getColormap(varStore.selVar))
+// 优先显示实际渲染量程，若尚未计算则回退配置占位值
+const displayVmin = computed(() => varStore.renderRange?.vmin ?? vm.value.vmin)
+const displayVmax = computed(() => varStore.renderRange?.vmax ?? vm.value.vmax)
+const displayMid  = computed(() => ((displayVmin.value + displayVmax.value) / 2))
 
 // Threshold inputs
 const threshMinInput = ref<string>('')
@@ -84,9 +88,9 @@ watch([cmName, () => varStore.selVar], drawGradient)
     <div class="ramp-wrap">
       <canvas ref="canvasRef" class="ramp-canvas" width="220" height="12" />
       <div class="ramp-ticks">
-        <span>{{ vm.vmin }}</span>
-        <span>{{ ((vm.vmin + vm.vmax) / 2).toFixed(0) }}</span>
-        <span>{{ vm.vmax }}</span>
+        <span>{{ displayVmin.toPrecision(3) }}</span>
+        <span>{{ displayMid.toPrecision(3) }}</span>
+        <span>{{ displayVmax.toPrecision(3) }}</span>
       </div>
     </div>
 

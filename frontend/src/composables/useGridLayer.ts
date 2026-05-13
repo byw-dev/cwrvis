@@ -43,6 +43,13 @@ class LruCache<V> {
   }
 
   has(key: string): boolean { return this.map.has(key) }
+
+  clear(): void {
+    for (const val of this.map.values()) {
+      if (val instanceof ImageBitmap) val.close()
+    }
+    this.map.clear()
+  }
 }
 
 const imageCache = new LruCache<ImageBitmap>(20)
@@ -124,6 +131,8 @@ export function useGridLayer() {
       if (dataMin <= dataMax) { vmin = dataMin; vmax = dataMax }
     }
 
+    varStore.setRenderRange(vmin, vmax)
+
     const req: RenderRequest = {
       frame2d,
       lut,
@@ -187,16 +196,15 @@ export function useGridLayer() {
     }
   }
 
-  // Watch for state changes that require re-render
+  // 色卡/阈值变更：清缓存后重渲（bitmap 需用新配色重新生成）
   watch(
-    [
-      () => varStore.selVar,
-      () => timeStore.mode,
-      () => timeStore.currentIndex,
-      () => settings.colormaps,
-      () => varStore.threshMin,
-      () => varStore.threshMax,
-    ],
+    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax],
+    () => { imageCache.clear(); renderCurrent() },
+  )
+
+  // var/时间变更：直接重渲（缓存仍有效）
+  watch(
+    [() => varStore.selVar, () => timeStore.mode, () => timeStore.currentIndex],
     () => { renderCurrent() },
     { immediate: true },
   )

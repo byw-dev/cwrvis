@@ -10,14 +10,21 @@ export const useVarStore = defineStore('var', () => {
   const threshMin = ref<number | null>(null)
   const threshMax = ref<number | null>(null)
 
+  // 实际渲染时使用的量程（当配置占位值不匹配数据时由 useGridLayer 自动更新）
+  const renderRange = ref<{ vmin: number; vmax: number } | null>(null)
+
   const varMeta = computed(() => VARS[selVar.value])
   const varGroup = computed(() => VAR_TO_GROUP[selVar.value])
 
   function selectVar(name: VarName): void {
     selVar.value = name
-    // Reset thresholds when switching var
     threshMin.value = null
     threshMax.value = null
+    renderRange.value = null
+  }
+
+  function setRenderRange(vmin: number, vmax: number): void {
+    renderRange.value = { vmin, vmax }
   }
 
   function setThresh(min: number | null, max: number | null): void {
@@ -34,10 +41,12 @@ export const useVarStore = defineStore('var', () => {
     selVar,
     threshMin,
     threshMax,
+    renderRange,
     varMeta,
     varGroup,
     selectVar,
     setThresh,
     clearThresh,
+    setRenderRange,
   }
 })

@@ -5,7 +5,6 @@ import { useGridLayer } from '@/composables/useGridLayer'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import HoverTooltip from '@/components/map/HoverTooltip.vue'
-import PinTip from '@/components/map/PinTip.vue'
 import Legend from '@/components/panels/Legend.vue'
 import Inspector from '@/components/panels/Inspector.vue'
 import HistoryModal from '@/components/modals/HistoryModal.vue'
@@ -13,86 +12,10 @@ import { isInGridBounds } from '@/utils/grid'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
 
-const { map }                           = useMap()
-const { getValueAt, fetchFrames }       = useGridLayer()
+const { map }                     = useMap()
+const { getValueAt, fetchFrames } = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
-
-// ── Hover state ───────────────────────────────────────────────────────────────
-
-const hover = ref<{ x: number; y: number; value: number | null } | null>(null)
-
-// ── Picked point state ────────────────────────────────────────────────────────
-
-interface Picked { lat: number; lon: number; x: number; y: number }
-const picked    = ref<Picked | null>(null)
-const pickedValue = ref<number | null>(null)
-const showHistory = ref(false)
-const gridData  = ref<Record<string, (number | null)[][][]>>({})
-
-// ── Map event handlers ────────────────────────────────────────────────────────
-
-function onMouseMove(e: MouseEvent) {
-  const m = map.value
-  if (!m) return
-
-  const rect   = m.getContainer().getBoundingClientRect()
-  const lngLat = m.unproject([e.clientX - rect.left, e.clientY - rect.top])
-
-  if (!isInGridBounds(lngLat.lat, lngLat.lng)) {
-    hover.value = null
-    return
-  }
-
-  hover.value = { x: e.clientX, y: e.clientY, value: getValueAt(lngLat.lat, lngLat.lng) }
-
-  if (picked.value) {
-    const pt = m.project([picked.value.lon, picked.value.lat] as [number, number])
-    picked.value = { ...picked.value, x: pt.x, y: pt.y }
-  }
-}
-
-function onMouseLeave() {
-  hover.value = null
-}
-
-function onMapClick(e: { lngLat: LngLat; point: { x: number; y: number } }) {
-  if (!isInGridBounds(e.lngLat.lat, e.lngLat.lng)) {
-    clearPick()
-    return
-  }
-  picked.value = { lat: e.lngLat.lat, lon: e.lngLat.lng, x: e.point.x, y: e.point.y }
-  pickedValue.value = getValueAt(e.lngLat.lat, e.lngLat.lng)
-}
-
-function clearPick() {
-  picked.value = null
-  pickedValue.value = null
-  showHistory.value = false
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') clearPick()
-}
-
-// ── History modal ─────────────────────────────────────────────────────────────
-
-const HISTORY_MODES: AggMode[] = ['monthly', 'yearly', 'avg_monthly', 'avg_season']
-const GRAN_PATH_MAP: Partial<Record<AggMode, string>> = {
-  monthly: 'month', yearly: 'year', avg_monthly: 'mean_month', avg_season: 'mean_season',
-}
-
-async function openHistory() {
-  showHistory.value = true
-  const varName = varStore.selVar as VarName
-  const results = await Promise.all(HISTORY_MODES.map(m => fetchFrames(varName, m)))
-  const data: Record<string, (number | null)[][][]> = {}
-  HISTORY_MODES.forEach((m, i) => {
-    const frames = results[i]
-    if (frames) data[GRAN_PATH_MAP[m]!] = frames
-  })
-  gridData.value = data
-}
 
 // ── Frame label ───────────────────────────────────────────────────────────────
 
@@ -107,19 +30,103 @@ const frameLabel = computed(() => {
   }
 })
 
+// ── Hover state（附带 lngLat 以便时间帧变化时重算值）────────────────────────
+
+interface HoverState { x: number; y: number; lat: number; lng: number; value: number | null }
+const hover = ref<HoverState | null>(null)
+
+// ── Picked point state ────────────────────────────────────────────────────────
+
+interface Picked { lat: number; lon: number; x: number; y: number }
+const picked      = ref<Picked | null>(null)
+const pickedValue = ref<number | null>(null)
+const showHistory = ref(false)
+const gridData    = ref<Record<string, (number | null)[][][]>>({})
+
+// 时间帧变化时重算 hover 和 pick 的值
+watch(
+  [() => timeStore.currentIndex, () => timeStore.mode],
+  () => {
+    if (hover.value) {
+      hover.value = { ...hover.value, value: getValueAt(hover.value.lat, hover.value.lng) }
+    }
+    if (picked.value) {
+      pickedValue.value = getValueAt(picked.value.lat, picked.value.lon)
+    }
+  },
+)
+
+// ── Map event handlers ────────────────────────────────────────────────────────
+
+function getLngLat(clientX: number, clientY: number) {
+  const m = map.value
+  if (!m) return null
+  const rect = m.getContainer().getBoundingClientRect()
+  return m.unproject([clientX - rect.left, clientY - rect.top])
+}
+
+function onMouseMove(e: MouseEvent) {
+  const lngLat = getLngLat(e.clientX, e.clientY)
+  if (!lngLat || !isInGridBounds(lngLat.lat, lngLat.lng)) {
+    hover.value = null
+    return
+  }
+  hover.value = { x: e.clientX, y: e.clientY, lat: lngLat.lat, lng: lngLat.lng, value: getValueAt(lngLat.lat, lngLat.lng) }
+}
+
+function onMouseLeave() { hover.value = null }
+
+function onMapMove() {
+  // 地图平移/缩放后更新圆点的屏幕坐标
+  const m = map.value
+  if (!m || !picked.value) return
+  const pt = m.project([picked.value.lon, picked.value.lat] as [number, number])
+  picked.value = { ...picked.value, x: pt.x, y: pt.y }
+}
+
+function onMapClick(e: { lngLat: LngLat; point: { x: number; y: number } }) {
+  if (!isInGridBounds(e.lngLat.lat, e.lngLat.lng)) { clearPick(); return }
+  picked.value    = { lat: e.lngLat.lat, lon: e.lngLat.lng, x: e.point.x, y: e.point.y }
+  pickedValue.value = getValueAt(e.lngLat.lat, e.lngLat.lng)
+}
+
+function clearPick() {
+  picked.value = null
+  pickedValue.value = null
+  showHistory.value = false
+}
+
+function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape') clearPick() }
+
+// ── History modal ─────────────────────────────────────────────────────────────
+
+const HISTORY_MODES: AggMode[] = ['monthly', 'yearly', 'avg_monthly', 'avg_season']
+const GRAN_PATH_MAP: Partial<Record<AggMode, string>> = {
+  monthly: 'month', yearly: 'year', avg_monthly: 'mean_month', avg_season: 'mean_season',
+}
+
+async function openHistory() {
+  showHistory.value = true
+  const varName = varStore.selVar as VarName
+  const results = await Promise.all(HISTORY_MODES.map(m => fetchFrames(varName, m)))
+  const data: Record<string, (number | null)[][][]> = {}
+  HISTORY_MODES.forEach((m, i) => { if (results[i]) data[GRAN_PATH_MAP[m]!] = results[i]! })
+  gridData.value = data
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 let mapContainer: HTMLElement | null = null
 
-// 用 watch 替代 onMounted，消除 map 初始化与组件挂载的竞态
 watch(
   () => map.value,
   (m) => {
-    if (!m || mapContainer) return  // 已绑定则跳过
+    if (!m || mapContainer) return
     mapContainer = m.getContainer()
     mapContainer.addEventListener('mousemove', onMouseMove)
     mapContainer.addEventListener('mouseleave', onMouseLeave)
     m.on('click', onMapClick)
+    m.on('move',  onMapMove)
     window.addEventListener('keydown', onKeydown)
   },
   { immediate: true },
@@ -133,34 +140,33 @@ onUnmounted(() => {
     mapContainer = null
   }
   m?.off('click', onMapClick)
+  m?.off('move',  onMapMove)
   window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
 <template>
+  <!-- Hover tooltip（格点范围内，类 PinTip 样式，无操作按钮）-->
   <HoverTooltip
     v-if="hover"
     :x="hover.x"
     :y="hover.y"
+    :lat="hover.lat"
+    :lon="hover.lng"
     :value="hover.value"
-    :unit="varStore.varMeta.units"
-  />
-
-  <PinTip
-    v-if="picked"
-    :x="picked.x"
-    :y="picked.y"
-    :lat="picked.lat"
-    :lon="picked.lon"
-    :value="pickedValue"
     :unit="varStore.varMeta.units"
     :frame-label="frameLabel"
     :var-name="varStore.selVar"
-    @clear="clearPick"
-    @history="openHistory"
   />
 
-  <!-- 右侧面板：图例 + 检查器 -->
+  <!-- Click 圆点标记 -->
+  <div
+    v-if="picked"
+    class="pick-dot"
+    :style="{ left: picked.x + 'px', top: picked.y + 'px' }"
+  />
+
+  <!-- 右侧面板：检查器（有 pick 时）+ 图例 -->
   <div class="right-panel">
     <Inspector
       v-if="picked"
@@ -189,6 +195,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.pick-dot {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 200;
+  box-shadow: 0 0 0 3px rgba(88, 224, 255, 0.3);
+}
+
 .right-panel {
   position: fixed;
   right: 12px;
