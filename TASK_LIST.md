@@ -1,7 +1,7 @@
 # TASK_LIST — cwrvis 任务总览
 
 > 本文件是任务系统的入口仪表盘，提供进度全貌和当前聚焦。  
-> 任务详情、格式规范、工作流见 [`docs/tasks/`](docs/tasks/SCHEMA.md)。
+> 完整任务见 [`docs/tasks/phases/phase-1-mvp.md`](docs/tasks/phases/phase-1-mvp.md)；规范与工作流见 [`docs/tasks/SCHEMA.md`](docs/tasks/SCHEMA.md)。
 
 ---
 
@@ -62,23 +62,6 @@
 
 > ⚠️ 注意：`CLAUDE.md` 原文写"高德底图"，已按 DEC-004 决策更新为"默认 OSM、可切换高德"。
 > 若甲方验收要求强制使用高德，需申请 API Key 并将 `settings.basemap` 默认值改为 `'amap_street'`。
-
----
-
-## 任务文件索引
-
-```
-docs/tasks/
-├── SCHEMA.md              规范说明（状态定义、格式、工作流）
-├── active.md              当前进行中（≤5 项）
-├── backlog.md             待规划：第二阶段候选、技术债
-├── phases/
-│   └── phase-1-mvp.md    Phase 1 完整任务清单（29 项，含工时、依赖）
-├── bugs/
-│   ├── open.md
-│   └── closed.md
-└── archive/               已完成阶段归档
-```
 
 ---
 
