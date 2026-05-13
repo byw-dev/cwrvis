@@ -4,6 +4,7 @@ import { useMetaStore } from '@/stores/meta'
 import ProductNav from '@/components/layout/ProductNav.vue'
 import BottomBar from '@/components/layout/BottomBar.vue'
 import MapView from '@/components/map/MapView.vue'
+import LeftRail from '@/components/layout/LeftRail.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
@@ -38,6 +39,9 @@ const showMap = computed(() =>
 
     <!-- 地图底层（grid / region 模块共享，v-show 保持实例存活）-->
     <MapView v-show="showMap" />
+
+    <!-- 左侧变量轨道（仅 grid / region 模块显示） -->
+    <LeftRail v-if="showMap" />
 
     <!-- 模块内容层（F-11/F-15 实现后替换占位） -->
     <PlaceholderModule v-if="!showMap" :module-id="activeModule" />
