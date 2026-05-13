@@ -113,7 +113,8 @@ const selRegionName = computed(() =>
               :class="{ active: regionStore.selRegionId === 'xizang' }"
               @click="regionStore.selectRegion('xizang'); regionOpen = false"
             >
-              <span class="region-dot">●</span>西藏自治区（全区）
+              <span class="region-dot" :class="{ on: regionStore.selRegionId === 'xizang' }">●</span>
+              西藏自治区（全区）
             </button>
             <div class="dropdown-divider" />
             <button
@@ -122,7 +123,10 @@ const selRegionName = computed(() =>
               class="dropdown-item region-item"
               :class="{ active: regionStore.selRegionId === r.region_id }"
               @click="regionStore.selectRegion(r.region_id as any); regionOpen = false"
-            >{{ r.name }}</button>
+            >
+              <span class="region-dot" :class="{ on: regionStore.selRegionId === r.region_id }">●</span>
+              {{ r.name }}
+            </button>
           </div>
           <div v-if="regionOpen" class="dropdown-backdrop" @click="regionOpen = false" />
         </div>
@@ -190,7 +194,8 @@ const selRegionName = computed(() =>
             :class="{ active: regionStore.selRegionId === 'xizang' }"
             @click="regionStore.selectRegion('xizang'); regionOpen = false"
           >
-            <span class="region-dot">●</span>西藏自治区（全区）
+            <span class="region-dot" :class="{ on: regionStore.selRegionId === 'xizang' }">●</span>
+            西藏自治区（全区）
           </button>
           <div class="dropdown-divider" />
           <button
@@ -199,7 +204,10 @@ const selRegionName = computed(() =>
             class="dropdown-item region-item"
             :class="{ active: regionStore.selRegionId === r.region_id }"
             @click="regionStore.selectRegion(r.region_id as any); regionOpen = false"
-          >{{ r.name }}</button>
+          >
+            <span class="region-dot" :class="{ on: regionStore.selRegionId === r.region_id }">●</span>
+            {{ r.name }}
+          </button>
         </div>
         <div v-if="regionOpen" class="dropdown-backdrop" @click="regionOpen = false" />
       </div>
@@ -430,8 +438,8 @@ const selRegionName = computed(() =>
 .item-name { flex: 1; font-size: 11px; }
 .item-unit { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); }
 
-.region-dot { color: var(--accent); margin-right: 2px; }
-.region-item { padding-left: 20px; }
+.region-dot { color: var(--accent); margin-right: 4px; visibility: hidden; }
+.region-dot.on { visibility: visible; }
 
 .dropdown-divider {
   height: 1px;
