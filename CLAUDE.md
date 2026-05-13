@@ -26,6 +26,7 @@ cwrvis/
 ├── CLAUDE.md                  # 本文件，Agent 工作主指南
 ├── AGENT.md                   # 指向本文件的入口
 ├── README.md                  # 项目简介（面向人类开发者）
+├── Makefile                   # 全流程构建脚本（data / frontend / package / dev）
 │
 ├── docs/
 │   └── design/
@@ -36,18 +37,19 @@ cwrvis/
 │       └── deployment.md      # 部署与运维设计
 │
 ├── data/
-│   └── shapes/                # 预设区域边界 GeoJSON 文件（GCJ-02，来自高德开放平台）
+│   ├── nc/                    # netcdf 原始数据（gitignored，由甲方提供）
+│   └── shapes/                # 预设区域边界 GeoJSON（GCJ-02，高德来源，在 git 中）
 │       ├── 西藏自治区.geojson
 │       └── ...（各地市）
 │
 ├── scripts/                   # 离线数据预生成脚本（Python，uv run）
-│   ├── netcdf_to_json.py      # netcdf → 格点 JSON（含均值颗粒度及 dxy 导出）
-│   └── netcdf_to_sqlite.py    # netcdf × shape → SQLite 区域统计
+│   ├── netcdf_to_json.py      # netcdf → 格点 JSON，输出至 static/grid/
+│   └── netcdf_to_sqlite.py    # netcdf × shape → SQLite，输出至 db/stats.db
 │
 ├── backend/                   # FastAPI 后端（打包时映射为 app/）
 │   ├── main.py                # 入口：挂载路由 + StaticFiles
 │   ├── routers/
-│   ├── config.py
+│   ├── config.py              # 默认路径：../static、../db/stats.db（相对 backend/）
 │   ├── database.py
 │   ├── schemas.py
 │   └── pyproject.toml         # 依赖声明（uv 管理）
@@ -59,22 +61,34 @@ cwrvis/
 │   │   ├── composables/
 │   │   └── config/            # 色卡、var 元数据等固化配置
 │   ├── public/
+│   ├── vite.config.ts         # build.outDir: '../static/web'
 │   └── package.json
+│
+├── static/                    # 【gitignored】所有生成的静态资产
+│   ├── grid/                  # S-01 输出：格点 JSON（76 文件，~35MB）
+│   ├── shapes/                # S-03 输出：region_id 命名的 GeoJSON
+│   ├── reports/               # .docx 报告（由数据团队提供）
+│   └── web/                   # 前端 build 产物（pnpm build）
+│
+├── db/                        # 【gitignored】生成的数据库
+│   └── stats.db               # S-02 输出：区域统计 SQLite（~632KB）
+│
+├── conf/
+│   └── config.env             # 环境变量（PORT、DB_PATH 等）
 │
 └── deploy/
     └── systemd/
         └── cwrvis.service     # systemd 服务单元文件
 ```
 
-**分发包结构**（`bin/start.sh` 解压即运行，见 `docs/design/deployment.md`）：
+**dev 与部署结构同构**：后端从 `backend/` 目录运行，通过 `../static` 和 `../db` 访问生成产物；部署时只需将 `backend/` 重命名为 `app/`，其余目录结构不变：
+
 ```
 cwrvis-{version}/
 ├── bin/start.sh  stop.sh
-├── app/          ← backend/ 内容
-├── static/grid/  ← 格点 JSON（预生成）
-├── static/web/   ← 前端 build 产物
-├── static/reports/
-├── db/stats.db   ← 不对外暴露
+├── app/          ← backend/ 内容（含 .venv）
+├── static/       ← 与 dev 完全相同（grid/ shapes/ reports/ web/）
+├── db/stats.db
 ├── conf/config.env
 └── logs/
 ```

@@ -154,7 +154,7 @@ def _write(path: Path, data) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="netcdf → 格点 JSON")
     parser.add_argument("--nc-dir", default="data/nc", type=Path, metavar="DIR")
-    parser.add_argument("--out-dir", default="output/static/grid", type=Path, metavar="DIR")
+    parser.add_argument("--out-dir", default="static/grid", type=Path, metavar="DIR")
     args = parser.parse_args()
 
     yearly, monthly = _scan_files(args.nc_dir)

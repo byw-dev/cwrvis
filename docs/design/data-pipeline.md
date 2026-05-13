@@ -141,13 +141,13 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 ### 执行方式
 
 ```bash
-# 默认路径（nc-dir=data/nc，out-dir=output/static/grid）
+# 默认路径（nc-dir=data/nc，out-dir=static/grid）—— 从项目根运行
 uv run python scripts/netcdf_to_json.py
 
-# 指定路径
+# 显式指定
 uv run python scripts/netcdf_to_json.py \
   --nc-dir data/nc \
-  --out-dir /data/static/grid
+  --out-dir static/grid
 ```
 
 ### 性能估算

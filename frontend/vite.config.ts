@@ -19,6 +19,10 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    outDir: '../static/web',
+    emptyOutDir: true,
+  },
   worker: {
     format: 'es',
   },
