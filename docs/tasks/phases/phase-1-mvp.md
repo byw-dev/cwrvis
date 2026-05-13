@@ -136,7 +136,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 仅在 `grid` / `region` 模块显示
   - `← needs: F-03`
 
-- [ ] `TODO` **F-06** `[M]` SubToolbar 组件（三种形态）
+- [x] `DONE` **F-06** `[M]` SubToolbar 组件（三种形态）
   - **grid 形态**：VarDropdown（点击展开，按分组列出所有 var）+ 两组聚合模式按钮（原始/统计）+ 右侧模式参数（随 mode 动态变化）
   - **region 形态**：继承 grid，在聚合模式右侧追加 RegionPicker（下拉，支持全区 + 各地市分组）；与地图点击双向联动
   - **export 形态**：RegionPicker + 年份下拉（全部/2000–2025）
@@ -166,7 +166,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - LUT 由主线程预计算（256步 RGBA，见 DEC-015），Worker 只做查表
   - `← needs: F-01`
 
-- [ ] `TODO` **F-10** `[L]` useGridLayer composable
+- [x] `DONE` **F-10** `[L]` useGridLayer composable
   - fetch `/grid/{gran}/{var}.json`，解析，缓存全量数据（内存）
   - 按 `sel` 提取当前帧二维数组 → postMessage 给 Worker → 收到 ImageBitmap → 更新 MapLibre ImageSource
   - LRU 帧缓存（20帧 ImageBitmap），预加载 ±2 帧
@@ -175,14 +175,14 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 ### 格点数据模块
 
-- [ ] `TODO` **F-11** `[M]` GridModule 容器 + 地图取值点交互
+- [x] `DONE` **F-11** `[M]` GridModule 容器 + 地图取值点交互
   - `HoverTooltip.vue`：跟随鼠标，显示双线性插值数值 + 单位（`pointer-events: none`，绝对定位）
   - `PinTip.vue`：固定取值点气泡，绑定地图投影坐标，随时间轴切帧自动重新插值更新数值；含 [查看历史 ↗] 和 [✕ 清除] 按钮
   - 十字光标 Marker（4px 描边圆 + 十字线，SVG 实现）
   - Escape 键清除取值点；地图拖拽时 PinTip 跟随
   - `← needs: F-10`
 
-- [ ] `TODO` **F-12** `[M]` Legend + Inspector 面板（Right Stack）
+- [x] `DONE` **F-12** `[M]` Legend + Inspector 面板（Right Stack）
   - `Legend.vue`：
     - 变量名 + long_name + unit + 插值方法说明
     - MIN / MEAN / MAX 统计卡（当前帧全域）
@@ -195,7 +195,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 面板位置（左/右）响应 `settings.legendPosition`
   - `← needs: F-10`
 
-- [ ] `TODO` **F-13** `[M]` HistoryModal（格点数据模式）
+- [x] `DONE` **F-13** `[M]` HistoryModal（格点数据模式）
   - 4 个 Tab：逐月（312帧）/ 逐年（26帧）/ 多年月均（12帧）/ 多年季均（4帧）
   - **数据来源**：纯前端，从已加载的格点 JSON 对 `picked.{lat, lon}` 做双线性插值；按需 fetch 尚未加载的 JSON（见 DEC-012 类比逻辑）
   - ECharts 折线图（深色主题配置，背景 `--bg-1`，线色 `--accent`）：
@@ -208,7 +208,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 ### 区域统计模块
 
-- [ ] `TODO` **F-14** `[M]` useRegionLayer composable
+- [x] `DONE` **F-14** `[M]` useRegionLayer composable
   - 加载所有区域的 GeoJSON（`/shapes/{region_id}.geojson`，并行 fetch）
   - 坐标系修正：若底图为 GCJ-02 则不处理；若为 WGS-84 则整体偏移（见 DEC-005）
   - MapLibre Source + 两个 Layer：FillLayer（透明度由 feature-state 驱动）+ LineLayer（边界线）
@@ -216,7 +216,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 响应 `selRegionId` 变化更新 feature-state
   - `← needs: F-08`
 
-- [ ] `TODO` **F-15** `[M]` RegionModule 容器 + 区域交互
+- [x] `DONE` **F-15** `[M]` RegionModule 容器 + 区域交互
   - 进入模块或切换区域/聚合模式时：按需请求 `GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=2025`；先查 `statsCache`（key: `{regionId}_{granularity}`），命中则跳过请求
   - 返回数据为全部 15 var 的宽表行，缓存后直接读取当前 selVar 对应列渲染 Inspector
   - 地图 click 事件：命中地市 → 更新 `selRegionId` → 联动 SubToolbar RegionPicker
@@ -224,7 +224,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 区域外点击：无响应
   - `← needs: F-06, F-14, F-03`
 
-- [ ] `TODO` **F-16** `[L]` HistoryModal（区域统计模式）
+- [x] `DONE` **F-16** `[L]` HistoryModal（区域统计模式）
   - **数据来源**：`/api/v1/stats`（后端 SQLite），statsCache 中有则复用；全部 4 个 Tab 均来自后端，无客户端计算
   - 4 个 Tab：逐月（`month`，312帧）/ 逐年（`year`，26帧）/ 月平均（`mean_month`，12帧）/ 季平均（`mean_season`，4帧）
   - ECharts 折线图，**多变量叠加**：
@@ -238,19 +238,19 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 ### 其余模块
 
-- [ ] `TODO` **F-17** `[S]` ExportModule（数据导出）
+- [x] `DONE` **F-17** `[S]` ExportModule（数据导出）
   - 居中卡片布局；RegionPicker（复用 F-06 中的同名组件）+ 年份下拉
   - 下载：构造 URL → `<a href download>` 触发；后端 404 → 页面内行内错误提示
   - `← needs: F-06`
 
-- [ ] `TODO` **F-18** `[S]` SettingsPanel（用户设置）
+- [x] `DONE` **F-18** `[S]` SettingsPanel（用户设置）
   - Overlay 面板（点击遮罩关闭）
   - 底图选择：4 个 radio，选中立即生效（`settings.basemap` → `useMap` 响应）
   - 图例位置：左/右 radio
   - "恢复默认值"按钮：清除所有 `cwrvis:` localStorage key → `window.location.reload()`
   - `← needs: F-03, F-04`
 
-- [ ] `TODO` **F-19** `[S]` PlaceholderModule（占位模块）
+- [x] `DONE` **F-19** `[S]` PlaceholderModule（占位模块）
   - 总览 / 时序分析 / 站点观测 / 模式诊断共用
   - 显示模块编号 + 名称 + "该模块正在建设中"，风格与主题一致
   - `← needs: F-02`
@@ -284,8 +284,8 @@ F-01 → F-02 → F-04 → F-05 → F-06
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 4 | 4 | 0 | 0 | 0 |
 | B 后端 | 4 | 4 | 0 | 0 | 0 |
-| F 前端 | 19 | 8 | 0 | 11 | 0 |
+| F 前端 | 19 | 19 | 0 | 0 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **30** | **16** | **0** | **14** | **0** |
+| **合计** | **30** | **30** | **0** | **0** | **0** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）
