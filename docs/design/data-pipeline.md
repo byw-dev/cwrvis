@@ -1,6 +1,6 @@
 # 数据预生成流程设计 — cwrvis
 
-> 文档版本：v1.2  
+> 文档版本：v1.3  
 > 对应模块：`scripts/`
 
 ---
@@ -34,7 +34,7 @@ data/nc/
 
 **变量（实测）：**
 
-每个 nc 文件包含以下 16 个变量，其中 `dxy`（网格面积，值恒定）不参与系统展示和预生成：
+每个 nc 文件包含以下 16 个变量，其中 `dxy`（网格面积，值恒定）不生成独立数据文件，但会导出到 `meta.json` 供前端单位换算使用：
 
 | var 名 | long_name | units |
 |--------|-----------|-------|
@@ -53,7 +53,7 @@ data/nc/
 | PEh | 水凝物降水效率 | % |
 | RCv | 水汽更新期 | day |
 | RCh | 水凝物更新期 | hour |
-| ~~dxy~~ | ~~网格面积~~ | ~~m²~~ |
+| dxy | 网格面积（导出至 meta.json） | m² |
 
 **空间规格（实测）：**
 ```
@@ -80,17 +80,19 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 ```
 {out_dir}/
 ├── meta.json
-├── year/
-│   ├── SP.json
-│   ├── aveMv.json
-│   └── ...（共 15 个）
-└── month/
-    ├── SP.json
-    ├── aveMv.json
-    └── ...（共 15 个）
+├── year/           ← 年颗粒度原始数据
+│   └── {var}.json  × 15
+├── month/          ← 月颗粒度原始数据
+│   └── {var}.json  × 15
+├── mean_all/       ← 年数据整体时间均值（1帧）
+│   └── {var}.json  × 15
+├── mean_month/     ← 月气候态，按月分组均值（12帧）
+│   └── {var}.json  × 15
+└── mean_season/    ← 季节气候态，按四季分组均值（4帧）
+    └── {var}.json  × 15
 ```
 
-总文件数：31 个（1 meta + 15 var × 2 颗粒度）
+总文件数：76 个（1 meta + 15 var × 5 颗粒度）
 
 ### meta.json 格式
 
@@ -98,16 +100,15 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 {
   "grid": {
     "lat": [39.5, 38.5, 37.5, ..., 25.5],
-    "lon": [75.5, 76.5, 77.5, ..., 99.5]
+    "lon": [75.5, 76.5, 77.5, ..., 99.5],
+    "dxy": [[v, v, ...], ...]
   },
   "timeline": {
-    "year": [2000, 2001, ..., 2015],
-    "month": [
-      {"year": 2000, "month": 1},
-      {"year": 2000, "month": 2},
-      ...
-      {"year": 2025, "month": 12}
-    ]
+    "year":        [2000, 2001, ..., 2025],
+    "month":       [{"year": 2000, "month": 1}, ..., {"year": 2025, "month": 12}],
+    "mean_all":    ["mean"],
+    "mean_month":  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "mean_season": ["spring", "summer", "autumn", "winter"]
   },
   "vars": {
     "SP":    {"name": "SP",    "long_name": "地面降水",     "units": "kg"},
@@ -117,9 +118,13 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 }
 ```
 
+**`grid.dxy`**：shape 15×25（lat×lon），单位 m²，供前端对 `units="kg"` 的 var 做 kg→mm 换算（`mm = kg / dxy[i][j]`）。
+
+**`timeline.mean_season` 帧顺序**：index 0=春（3/4/5月），1=夏（6/7/8月），2=秋（9/10/11月），3=冬（12/1/2月）。
+
 ### 数据文件格式
 
-`year/{var}.json` 和 `month/{var}.json` 均为纯嵌套数组，无包裹对象：
+所有五种颗粒度的数据文件均为纯嵌套数组，无包裹对象：
 
 ```json
 [
@@ -129,7 +134,7 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 ]
 ```
 
-- `frames[i]` 对应 `meta.json` 中 `timeline.year[i]` 或 `timeline.month[i]`
+- `frames[i]` 对应 `meta.json` 中对应颗粒度 `timeline[granularity][i]`
 - 行对应纬度（北→南），列对应经度（西→东）
 - 缺测值（NaN）统一用 `null` 表示
 
@@ -147,9 +152,10 @@ uv run python scripts/netcdf_to_json.py \
 
 ### 性能估算
 
-- 年颗粒度：16 文件，处理时间 < 30s
+- 年颗粒度：26 文件，处理时间 < 30s
 - 月颗粒度：312 文件，处理时间 < 5min
-- 输出总体积：约 30MB 原始（gzip 后约 8MB）
+- 均值计算：内存中完成（numpy nanmean），< 10s
+- 输出总体积：约 50MB 原始（gzip 后约 14MB）
 
 ---
 
