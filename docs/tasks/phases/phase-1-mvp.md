@@ -159,7 +159,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 预留 ImageSource slot（`grid-overlay`）供 useGridLayer 使用
   - `← needs: F-02, F-03`
 
-- [ ] `TODO` **F-09** `[M]` Web Worker（`workers/gridRenderer.worker.ts`）
+- [x] `DONE` **F-09** `[M]` Web Worker（`workers/gridRenderer.worker.ts`）
   - 消息入参：`{ frame2d: (number|null)[][], colormap: string, lut: Uint8ClampedArray, threshMin: number, threshMax: number, targetW: number, targetH: number }`
   - 步骤：双线性插值（15×25 → targetW×targetH）→ LUT 色卡查表 → 阈值过滤（null 或超出范围 → alpha=0）→ `createImageBitmap`
   - 返回：`{ imageBitmap: ImageBitmap }` via `postMessage(msg, [imageBitmap])`（Transferable）
@@ -284,8 +284,8 @@ F-01 → F-02 → F-04 → F-05 → F-06
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 4 | 4 | 0 | 0 | 0 |
 | B 后端 | 4 | 4 | 0 | 0 | 0 |
-| F 前端 | 19 | 6 | 0 | 13 | 0 |
+| F 前端 | 19 | 7 | 0 | 12 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **30** | **14** | **0** | **16** | **0** |
+| **合计** | **30** | **15** | **0** | **15** | **0** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）
