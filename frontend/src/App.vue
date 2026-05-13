@@ -8,6 +8,7 @@ import SubToolbar from '@/components/layout/SubToolbar.vue'
 import LeftRail from '@/components/layout/LeftRail.vue'
 import GridModule from '@/components/modules/GridModule.vue'
 import RegionModule from '@/components/modules/RegionModule.vue'
+import ExportModule from '@/components/modules/ExportModule.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
@@ -51,6 +52,7 @@ const showMap = computed(() =>
     <!-- 模块内容层 -->
     <GridModule   v-if="activeModule === 'grid'" />
     <RegionModule v-else-if="activeModule === 'region'" />
+    <ExportModule v-else-if="activeModule === 'export'" />
     <PlaceholderModule v-else-if="!showMap" :module-id="activeModule" />
 
     <BottomBar v-if="showBottomBar" />
