@@ -77,3 +77,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 *.log
+
+# 原始 netcdf 数据（体积大，不入库）
+data/nc/
+
+# 预生成输出（由脚本生成，不入库）
+output/

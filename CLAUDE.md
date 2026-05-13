@@ -40,8 +40,8 @@ cwrvis/
 │       ├── 西藏自治区.geojson
 │       └── ...（各地市）
 │
-├── scripts/                   # 离线数据预生成脚本（Python）
-│   ├── netcdf_to_json.py      # netcdf → 格点 JSON 切片
+├── scripts/                   # 离线数据预生成脚本（Python，uv run）
+│   ├── netcdf_to_json.py      # netcdf → 格点 JSON（含均值颗粒度及 dxy 导出）
 │   └── netcdf_to_sqlite.py    # netcdf × shape → SQLite 区域统计
 │
 ├── backend/                   # FastAPI 后端（打包时映射为 app/）
