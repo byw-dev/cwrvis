@@ -15,6 +15,23 @@ const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/gr
 // 每次帧渲染完毕（applyBitmap）时递增，供外部 watch 数据就绪
 const renderTick = shallowRef(0)
 
+// 模块级懒加载接口，供 HistoryModal 按需获取任意 var+mode 的帧数据
+export async function fetchGridFrames(
+  varName: string,
+  mode: AggMode,
+): Promise<(number | null)[][][] | null> {
+  const gran = GRAN_PATH[mode]
+  const key  = `${varName}_${gran}`
+  if (jsonCache.has(key)) return jsonCache.get(key)!
+  try {
+    const res = await fetch(`${GRID_BASE}/${gran}/${varName}.json`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as (number | null)[][][]
+    jsonCache.set(key, data)
+    return data
+  } catch { return null }
+}
+
 const GRAN_PATH: Record<AggMode, string> = {
   monthly:     'month',
   yearly:      'year',
@@ -163,9 +180,11 @@ export function useGridLayer() {
     if (!m) return
     const src = m.getSource('grid-overlay') as CanvasSource | undefined
     if (!src) return
-    // play() 调度 repaint；pause() 立即调用 prepare() 上传纹理到 GPU，repaint 时直接显示
+    // play() 设置 _playing=true 并调度 repaint，MapLibre 在下一帧正常渲染时
+    // 调用 prepare() 上传纹理（此时 style update 已处理，tiles 已就绪）。
+    // 2-rAF 后再 pause()，确保至少一帧完整渲染后才停止持续动画。
     src.play()
-    src.pause()
+    requestAnimationFrame(() => requestAnimationFrame(() => src.pause()))
     renderTick.value++
   }
 

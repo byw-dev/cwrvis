@@ -10,6 +10,7 @@ const props = defineProps<{
   value?: number | null
   unit?: string
   regionName?: string
+  showHistory?: boolean  // default true；avg_yearly 无历史数据时传 false
 }>()
 
 const emit = defineEmits<{
@@ -47,7 +48,11 @@ const coordLabel = computed(() =>
 
     <!-- Actions -->
     <div class="insp-actions">
-      <button class="insp-btn accent" @click="emit('history')">查看历史 ↗</button>
+      <button
+        v-if="showHistory !== false"
+        class="insp-btn accent"
+        @click="emit('history')"
+      >查看历史 ↗</button>
       <button class="insp-btn" @click="emit('clear')">清除</button>
     </div>
   </div>

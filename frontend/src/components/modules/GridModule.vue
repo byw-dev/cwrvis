@@ -11,9 +11,10 @@ import HistoryModal from '@/components/modals/HistoryModal.vue'
 import { isInGridBounds } from '@/utils/grid'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
+// fetchFrames 已从 useGridLayer return 中移除，历史数据由 HistoryModal 懒加载
 
-const { map }                               = useMap()
-const { getValueAt, fetchFrames, renderTick } = useGridLayer()
+const { map }                         = useMap()
+const { getValueAt, renderTick }      = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
 
@@ -40,8 +41,9 @@ const hover = ref<HoverState | null>(null)
 interface Picked { lat: number; lon: number; x: number; y: number }
 const picked      = ref<Picked | null>(null)
 const pickedValue = ref<number | null>(null)
-const showHistory = ref(false)
-const gridData    = ref<Record<string, (number | null)[][][]>>({})
+const showHistory   = ref(false)
+// 初始展示的历史 tab（与当前聚合模式对应）
+const historyInitTab = ref<'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'>('monthly')
 
 // 每次帧渲染完毕（jsonCache 已更新）或时间帧切换后，重算 hover 和 pick 的值
 // 用 renderTick 而非 varStore.selVar，避免在新 var 数据加载前就读到 null
@@ -101,18 +103,13 @@ function onKeydown(e: KeyboardEvent) { if (e.key === 'Escape') clearPick() }
 
 // ── History modal ─────────────────────────────────────────────────────────────
 
-const HISTORY_MODES: AggMode[] = ['monthly', 'yearly', 'avg_monthly', 'avg_season']
-const GRAN_PATH_MAP: Partial<Record<AggMode, string>> = {
-  monthly: 'month', yearly: 'year', avg_monthly: 'mean_month', avg_season: 'mean_season',
+const MODE_TO_TAB: Partial<Record<AggMode, 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'>> = {
+  monthly: 'monthly', yearly: 'yearly', avg_monthly: 'avg_monthly', avg_season: 'avg_season',
 }
 
-async function openHistory() {
-  showHistory.value = true
-  const varName = varStore.selVar as VarName
-  const results = await Promise.all(HISTORY_MODES.map(m => fetchFrames(varName, m)))
-  const data: Record<string, (number | null)[][][]> = {}
-  HISTORY_MODES.forEach((m, i) => { if (results[i]) data[GRAN_PATH_MAP[m]!] = results[i]! })
-  gridData.value = data
+function openHistory() {
+  historyInitTab.value = MODE_TO_TAB[timeStore.mode] ?? 'monthly'
+  showHistory.value    = true
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -178,6 +175,7 @@ onUnmounted(() => {
       :var-name="varStore.selVar"
       :value="pickedValue"
       :unit="varStore.varMeta.units"
+      :show-history="timeStore.mode !== 'avg_yearly'"
       @clear="clearPick"
       @history="openHistory"
     />
@@ -190,7 +188,7 @@ onUnmounted(() => {
     :lat="picked?.lat"
     :lon="picked?.lon"
     :var-name="varStore.selVar as VarName"
-    :grid-data="gridData"
+    :initial-tab="historyInitTab"
     @close="showHistory = false"
   />
 </template>
