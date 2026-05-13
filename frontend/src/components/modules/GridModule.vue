@@ -43,9 +43,9 @@ const pickedValue = ref<number | null>(null)
 const showHistory = ref(false)
 const gridData    = ref<Record<string, (number | null)[][][]>>({})
 
-// 时间帧变化时重算 hover 和 pick 的值
+// 时间帧或 var 变化时重算 hover 和 pick 的值
 watch(
-  [() => timeStore.currentIndex, () => timeStore.mode],
+  [() => timeStore.currentIndex, () => timeStore.mode, () => varStore.selVar],
   () => {
     if (hover.value) {
       hover.value = { ...hover.value, value: getValueAt(hover.value.lat, hover.value.lng) }
