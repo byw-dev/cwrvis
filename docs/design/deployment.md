@@ -56,6 +56,8 @@ app.mount("/",        StaticFiles(directory="../static/web", html=True), name="w
 
 ## 启动脚本
 
+> 运行入口固定为分发包 `app/` 目录下的 `uvicorn main:app`。
+
 **`bin/start.sh`**：
 ```bash
 #!/usr/bin/env bash

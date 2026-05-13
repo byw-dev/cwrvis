@@ -248,6 +248,9 @@ settings = Settings()
 
 ## 启动与进程管理
 
+> 约定：后端以分发包 `app/` 目录为运行基准，使用 `uvicorn main:app`。  
+> 不要求（也不保证）从仓库根目录直接用 `uvicorn backend.main:app` 启动。
+
 开发环境：
 ```bash
 cd backend
