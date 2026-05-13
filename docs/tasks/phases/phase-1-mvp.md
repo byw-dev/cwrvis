@@ -30,13 +30,13 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - `meta.json`：网格坐标、`dxy`（m²，用于 kg→mm 换算）、时间轴、var 元数据
   - 输出：`static/grid/`（已 `.gitignore`，需在目标机器运行）
 
-- [ ] `BLOCKED` **S-02** `[L]` netcdf_to_sqlite.py：生成区域统计 SQLite
-  - **空间聚合 Strategy Pattern**（见 DEC-015、data-pipeline.md）：
+- [x] `DONE` **S-02** `[L]` netcdf_to_sqlite.py：生成区域统计 SQLite
+  - **空间聚合 Strategy Pattern**（见 DEC-014、data-pipeline.md）：
     - `RegionAggregator` ABC：`prepare(region_geom, lats, lons)` + `aggregate(frame_2d, var_unit)`
     - `AreaWeightedMean`：geopandas 面积重叠权重，加权平均（默认，`--method area_weighted`）
     - `PointInBoundary`：中心点在边界内的格点；单位 `kg` → SUM，其余 → 算术平均（`--method point_in_boundary`）
     - `prepare()` 每区域调用一次，缓存权重/掩码，逐帧复用
-  - **SQLite 宽表**（见 DEC-014）：
+  - **SQLite 宽表**（见 DEC-013）：
     - schema：`(region_id, granularity, year, month, SP, aveMv, ..., RCh)` — 15 var 为列
     - 仅存 `granularity IN ('year', 'month')` 原始值；派生聚合通过 SQL 在查询时计算
     - 主键：`(region_id, granularity, year, month)`
@@ -163,7 +163,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 消息入参：`{ frame2d: (number|null)[][], colormap: string, lut: Uint8ClampedArray, threshMin: number, threshMax: number, targetW: number, targetH: number }`
   - 步骤：双线性插值（15×25 → targetW×targetH）→ LUT 色卡查表 → 阈值过滤（null 或超出范围 → alpha=0）→ `createImageBitmap`
   - 返回：`{ imageBitmap: ImageBitmap }` via `postMessage(msg, [imageBitmap])`（Transferable）
-  - LUT 由主线程预计算（256步 RGBA，见 DEC-013），Worker 只做查表
+  - LUT 由主线程预计算（256步 RGBA，见 DEC-015），Worker 只做查表
   - `← needs: F-01`
 
 - [ ] `TODO` **F-10** `[L]` useGridLayer composable
@@ -188,7 +188,7 @@ F-01 → F-02 → F-04 → F-05 → F-06
     - MIN / MEAN / MAX 统计卡（当前帧全域）
     - 色标条（canvas 渲染渐变）+ 量程刻度
     - Colormap 选择器：5 个色带方块（Viridis/Turbo/Magma/Cyan/RdBu），按 var 持久化
-    - **阈值控制**：min/max 两个数值输入框（或拖拽手柄），写入 `threshMin/Max` → 触发 Worker 重渲（验收标准要求，见 DEC-013 / F-09）
+    - **阈值控制**：min/max 两个数值输入框（或拖拽手柄），写入 `threshMin/Max` → 触发 Worker 重渲（验收标准要求，见 DEC-015 / F-09）
   - `Inspector.vue`：
     - 格点模式：坐标 / 时间 / 变量名 / 大字数值 + 单位 / 分位条（相对当前帧 min/max）/ [查看历史] [清除]
     - 区域模式：区域名 / 时间 / 变量名 / 区域统计数值 / [查看历史] [清除]
@@ -282,10 +282,10 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
-| S 脚本 | 4 | 1 | 0 | 2 | 1 |
+| S 脚本 | 4 | 2 | 0 | 2 | 0 |
 | B 后端 | 4 | 0 | 0 | 4 | 0 |
 | F 前端 | 19 | 5 | 0 | 14 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **30** | **6** | **0** | **23** | **1** |
+| **合计** | **30** | **7** | **0** | **23** | **0** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）

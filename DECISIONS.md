@@ -134,12 +134,12 @@
 
 ### DEC-012：区域统计聚合模式（年平均/月平均/季平均）在前端计算
 
-**状态**：Superseded by DEC-014  
+**状态**：Superseded by DEC-013  
 **决策**：~~区域统计的统计类聚合通过前端从已加载的逐年/逐月原始数据计算~~（已废弃）  
 
 ---
 
-### DEC-014：SQLite 宽表 schema，后端 SQL 承担全部时间聚合
+### DEC-013：SQLite 宽表 schema，后端 SQL 承担全部时间聚合
 
 **状态**：Active（Supersedes DEC-012）  
 **决策**：
@@ -158,7 +158,7 @@
 
 ---
 
-### DEC-015：空间聚合算法通过 Strategy Pattern 可替换
+### DEC-014：空间聚合算法通过 Strategy Pattern 可替换
 
 **状态**：Active  
 **决策**：`scripts/netcdf_to_sqlite.py` 中的"格点×区域"空间聚合逻辑抽象为 `RegionAggregator` ABC，提供两个实现，通过 `--method` CLI 参数选择。开发阶段可对比两种方法的输出；部署时只保留一种。
@@ -177,7 +177,7 @@
 
 ## 格点渲染
 
-### DEC-013：Web Worker + OffscreenCanvas 渲染格点图层
+### DEC-015：Web Worker + OffscreenCanvas 渲染格点图层
 
 **状态**：Active  
 **决策**：格点双线性插值、色卡映射、阈值过滤全部在 Web Worker 中执行，通过 OffscreenCanvas 生成 ImageBitmap，以 Transferable 方式返回主线程，挂载为 MapLibre ImageSource。  
