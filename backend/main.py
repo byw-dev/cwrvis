@@ -32,5 +32,7 @@ if (_s / "grid").is_dir():
     app.mount("/grid", StaticFiles(directory=_s / "grid"), name="grid")
 if (_s / "reports").is_dir():
     app.mount("/reports", StaticFiles(directory=_s / "reports"), name="reports")
+if (_s / "shapes").is_dir():
+    app.mount("/shapes", StaticFiles(directory=_s / "shapes"), name="shapes")
 if (_s / "web").is_dir():
     app.mount("/", StaticFiles(directory=_s / "web", html=True), name="web")
