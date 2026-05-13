@@ -1,0 +1,116 @@
+// ─── Variable ────────────────────────────────────────────────────────────────
+
+export type VarName =
+  | 'SP' | 'aveMv' | 'aveMh' | 'INv' | 'OTv'
+  | 'INh' | 'OTh' | 'MC' | 'GMh' | 'GMv'
+  | 'CWR' | 'CEv' | 'PEh' | 'RCv' | 'RCh'
+
+export interface VarMeta {
+  name: VarName
+  long_name: string
+  units: string
+  vmin: number
+  vmax: number
+  colorScale: Array<{ value: number; color: string }>
+}
+
+// ─── Region ──────────────────────────────────────────────────────────────────
+
+export type RegionId =
+  | 'xizang' | 'lasa' | 'rikaze' | 'shannan'
+  | 'linzhi' | 'changdu' | 'naqu' | 'ali'
+
+export type RegionLevel = 'province' | 'prefecture'
+
+export interface RegionMeta {
+  region_id: RegionId
+  name: string
+  level: RegionLevel
+}
+
+// ─── Aggregation mode & timeline ─────────────────────────────────────────────
+
+export type AggMode =
+  | 'monthly'      // 逐月, 312 帧
+  | 'yearly'       // 逐年, 26 帧
+  | 'avg_yearly'   // 年平均, 1 帧
+  | 'avg_monthly'  // 月平均, 12 帧
+  | 'avg_season'   // 季平均, 4 帧
+
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+
+export interface FrameSel {
+  year: number    // used by: monthly, yearly, avg_monthly
+  month: number   // used by: monthly, avg_monthly
+  season: Season  // used by: avg_season
+}
+
+export interface TimelineItem {
+  year?: number
+  month?: number
+  season?: Season
+  label: string
+  major: boolean
+}
+
+// ─── Basemap ─────────────────────────────────────────────────────────────────
+
+export type BasemapId = 'osm' | 'amap_street' | 'amap_satellite' | 'carto_dark'
+
+// ─── Colormap ────────────────────────────────────────────────────────────────
+
+export type ColormapName = 'viridis' | 'turbo' | 'magma' | 'cyan' | 'rdbu'
+
+// ─── Grid metadata (from /grid/meta.json) ────────────────────────────────────
+
+export interface GridMeta {
+  grid: {
+    lat: number[]
+    lon: number[]
+    dxy: number[][]  // shape: lat × lon, unit: m²
+  }
+  timeline: {
+    year: number[]
+    month: Array<{ year: number; month: number }>
+    mean_all: ['mean']
+    mean_month: number[]    // 1–12
+    mean_season: Season[]
+  }
+  vars: Record<VarName, { name: VarName; long_name: string; units: string }>
+}
+
+// ─── Region stats (from /api/v1/stats) ───────────────────────────────────────
+
+export interface StatRow {
+  year: number
+  month: number | null
+  value: number | null
+}
+
+export interface StatsResponse {
+  region_id: RegionId
+  granularity: 'year' | 'month'
+  vars: Partial<Record<VarName, StatRow[]>>
+}
+
+// ─── Picked point (grid mode) ────────────────────────────────────────────────
+
+export interface PickedPoint {
+  lat: number
+  lon: number
+  value: number | null
+}
+
+// ─── API response envelope ───────────────────────────────────────────────────
+
+export interface ApiOk<T> {
+  ok: true
+  data: T
+}
+
+export interface ApiErr {
+  ok: false
+  error: string
+}
+
+export type ApiResult<T> = ApiOk<T> | ApiErr

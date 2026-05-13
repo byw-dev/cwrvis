@@ -1,0 +1,85 @@
+/* === 全局 reset & 基础样式 ================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.app-root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.005em;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 无圆角、无阴影原则 */
+button {
+  border-radius: 0;
+  cursor: pointer;
+}
+
+input, select {
+  border-radius: 0;
+  font-family: inherit;
+}
+
+/* === MapLibre 样式覆盖 ==================================================== */
+.maplibregl-map {
+  font-family: var(--font-mono) !important;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(7, 9, 12, 0.7) !important;
+  color: var(--fg-3) !important;
+  font-size: 9px !important;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--bg-2) !important;
+  border: 1px solid var(--line-2) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.maplibregl-ctrl-group button {
+  background: var(--bg-2) !important;
+  border-bottom: 1px solid var(--line-1) !important;
+  color: var(--fg-1) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--bg-3) !important;
+  color: var(--accent) !important;
+}
+
+/* === 滚动条 =============================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line-3);
+}
