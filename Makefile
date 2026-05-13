@@ -1,0 +1,151 @@
+# ==============================================================================
+# cwrvis — 项目构建 Makefile
+#
+# 从项目根目录运行：make <target> [VAR=value ...]
+#
+# Python:  所有命令通过 uv run 执行（.venv 由 uv 管理）
+# Node.js: 所有命令通过 pnpm 执行（corepack 管理版本，首次需 corepack enable）
+# ==============================================================================
+
+VERSION      ?= 0.1.0
+NC_DIR       ?= data/nc
+SHAPE_DIR    ?= data/shapes
+METHOD       ?= area_weighted
+NODE_VERSION := $(shell cat .nvmrc 2>/dev/null || echo lts/*)
+DIST_DIR     := dist/cwrvis-$(VERSION)
+
+# 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
+NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
+
+.PHONY: all data data-grid data-sqlite shapes frontend dev package clean help
+
+# ---------------------------------------------------------------------------- #
+# 默认目标                                                                       #
+# ---------------------------------------------------------------------------- #
+
+all: data shapes frontend  ## 生成全部离线数据 + 编译前端
+
+# ---------------------------------------------------------------------------- #
+# 数据生成                                                                       #
+# ---------------------------------------------------------------------------- #
+
+data: data-grid data-sqlite shapes  ## 全部离线数据（grid + sqlite + shapes）
+
+data-grid:  ## netcdf → 格点 JSON（static/grid/）
+	uv run python scripts/netcdf_to_json.py \
+		--nc-dir $(NC_DIR) \
+		--out-dir static/grid
+
+data-sqlite:  ## netcdf × shapes → 区域统计 SQLite（db/stats.db）；METHOD= 可覆盖算法
+	uv run python scripts/netcdf_to_sqlite.py \
+		--nc-dir $(NC_DIR) \
+		--shape-dir $(SHAPE_DIR) \
+		--db-path db/stats.db \
+		--method $(METHOD)
+
+shapes:  ## data/shapes/ 中文名 → static/shapes/ region_id 命名
+	mkdir -p static/shapes
+	cp "$(SHAPE_DIR)/西藏自治区.geojson" static/shapes/xizang.geojson
+	cp "$(SHAPE_DIR)/拉萨市.geojson"     static/shapes/lasa.geojson
+	cp "$(SHAPE_DIR)/日喀则市.geojson"   static/shapes/rikaze.geojson
+	cp "$(SHAPE_DIR)/山南市.geojson"     static/shapes/shannan.geojson
+	cp "$(SHAPE_DIR)/林芝市.geojson"     static/shapes/linzhi.geojson
+	cp "$(SHAPE_DIR)/昌都市.geojson"     static/shapes/changdu.geojson
+	cp "$(SHAPE_DIR)/那曲市.geojson"     static/shapes/naqu.geojson
+	cp "$(SHAPE_DIR)/阿里地区.geojson"   static/shapes/ali.geojson
+
+# ---------------------------------------------------------------------------- #
+# 前端                                                                           #
+# ---------------------------------------------------------------------------- #
+
+frontend:  ## 编译前端，产物输出至 static/web/
+	bash -c '$(NVM_INIT) && cd frontend && pnpm install && pnpm build'
+
+# ---------------------------------------------------------------------------- #
+# 本地开发                                                                       #
+# ---------------------------------------------------------------------------- #
+
+dev:  ## 同时启动 FastAPI(:8000) 和 Vite(:5173)，Ctrl+C 一并退出
+	@echo "Starting backend :8000 + frontend :5173  (Ctrl+C to stop both)"
+	@trap 'kill %1 %2 2>/dev/null; exit 0' INT TERM; \
+	 (cd backend && uv run uvicorn main:app --reload --port 8000) & \
+	 (bash -c '$(NVM_INIT) && cd frontend && pnpm dev') & \
+	 wait
+
+# ---------------------------------------------------------------------------- #
+# 打包                                                                           #
+# ---------------------------------------------------------------------------- #
+
+package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz
+	@echo "==> Assembling $(DIST_DIR)  (version=$(VERSION))"
+	rm -rf $(DIST_DIR)
+	mkdir -p $(DIST_DIR)/bin $(DIST_DIR)/logs $(DIST_DIR)/conf
+
+	# 后端源码 → app/（排除 .venv、__pycache__）
+	rsync -a \
+		--exclude='.venv' \
+		--exclude='__pycache__' \
+		--exclude='*.pyc' \
+		--exclude='*.pyo' \
+		backend/ $(DIST_DIR)/app/
+
+	# 生成的静态资产 → static/
+	rsync -a static/ $(DIST_DIR)/static/
+
+	# 数据库 → db/
+	mkdir -p $(DIST_DIR)/db
+	cp db/stats.db $(DIST_DIR)/db/stats.db
+
+	# 配置 → conf/（使用 example 作为初始模板，若已有 config.env 则覆盖）
+	cp conf/config.env.example $(DIST_DIR)/conf/config.env
+	[ -f conf/config.env ] && cp conf/config.env $(DIST_DIR)/conf/config.env || true
+
+	# 运行脚本 → bin/
+	cp bin/start.sh bin/stop.sh $(DIST_DIR)/bin/
+	chmod +x $(DIST_DIR)/bin/start.sh $(DIST_DIR)/bin/stop.sh
+
+	# 在 app/ 中创建 venv 并安装 Python 依赖
+	cd $(DIST_DIR)/app && uv venv .venv && uv pip install .
+
+	# 打压缩包
+	mkdir -p dist
+	cd dist && tar -czf cwrvis-$(VERSION).tar.gz cwrvis-$(VERSION)/
+	@echo "==> dist/cwrvis-$(VERSION).tar.gz  ready"
+
+# ---------------------------------------------------------------------------- #
+# 清理                                                                           #
+# ---------------------------------------------------------------------------- #
+
+clean:  ## 删除全部生成文件（static/grid shapes web，db/，dist/）
+	rm -rf static/grid static/shapes static/web static/reports
+	rm -rf db
+	rm -rf dist
+
+# ---------------------------------------------------------------------------- #
+# 帮助                                                                           #
+# ---------------------------------------------------------------------------- #
+
+help:  ## 显示此帮助
+	@echo ""
+	@echo "Usage: make <target> [VAR=value ...]"
+	@echo ""
+	@echo "Data generation:"
+	@echo "  make data                    全部离线数据（grid + sqlite + shapes）"
+	@echo "  make data-grid               格点 JSON        →  static/grid/"
+	@echo "  make data-sqlite             区域统计 SQLite  →  db/stats.db"
+	@echo "  make data-sqlite METHOD=point_in_boundary"
+	@echo "  make shapes                  GeoJSON 重命名   →  static/shapes/"
+	@echo ""
+	@echo "Frontend:"
+	@echo "  make frontend                编译前端         →  static/web/"
+	@echo ""
+	@echo "Development:"
+	@echo "  make dev                     FastAPI:8000 + Vite:5173（Ctrl+C 同时停止）"
+	@echo ""
+	@echo "Distribution:"
+	@echo "  make package                 打包  →  dist/cwrvis-$(VERSION).tar.gz"
+	@echo "  make package VERSION=1.0.0"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  make clean                   删除全部生成文件"
+	@echo ""
