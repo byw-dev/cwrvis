@@ -4,6 +4,7 @@ import { useMetaStore } from '@/stores/meta'
 import ProductNav from '@/components/layout/ProductNav.vue'
 import BottomBar from '@/components/layout/BottomBar.vue'
 import MapView from '@/components/map/MapView.vue'
+import SubToolbar from '@/components/layout/SubToolbar.vue'
 import LeftRail from '@/components/layout/LeftRail.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
@@ -36,6 +37,8 @@ const showMap = computed(() =>
       @update:active-module="activeModule = $event"
       @open-settings="settingsOpen = true"
     />
+
+    <SubToolbar :active-module="activeModule" />
 
     <!-- 地图底层（grid / region 模块共享，v-show 保持实例存活）-->
     <MapView v-show="showMap" />
