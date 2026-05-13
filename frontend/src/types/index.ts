@@ -5,13 +5,21 @@ export type VarName =
   | 'INh' | 'OTh' | 'MC' | 'GMh' | 'GMv'
   | 'CWR' | 'CEv' | 'PEh' | 'RCv' | 'RCh'
 
+export type VarGroupId = 'cwr' | 'state' | 'flux' | 'conv' | 'renew'
+
 export interface VarMeta {
   name: VarName
   long_name: string
   units: string
-  vmin: number
-  vmax: number
-  colorScale: Array<{ value: number; color: string }>
+  vmin: number  // natural min for colormap mapping (placeholder, update when data confirmed)
+  vmax: number  // natural max for colormap mapping (placeholder, update when data confirmed)
+  group: VarGroupId
+}
+
+export interface VarGroup {
+  id: VarGroupId
+  label: string
+  vars: VarName[]
 }
 
 // ─── Region ──────────────────────────────────────────────────────────────────
@@ -33,16 +41,16 @@ export interface RegionMeta {
 export type AggMode =
   | 'monthly'      // 逐月, 312 帧
   | 'yearly'       // 逐年, 26 帧
-  | 'avg_yearly'   // 年平均, 1 帧
+  | 'avg_yearly'   // 年平均, 1 帧（静态）
   | 'avg_monthly'  // 月平均, 12 帧
   | 'avg_season'   // 季平均, 4 帧
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
 
 export interface FrameSel {
-  year: number    // used by: monthly, yearly, avg_monthly
-  month: number   // used by: monthly, avg_monthly
-  season: Season  // used by: avg_season
+  year: number    // monthly / yearly / avg_monthly
+  month: number   // monthly / avg_monthly (1–12)
+  season: Season  // avg_season
 }
 
 export interface TimelineItem {
@@ -56,6 +64,17 @@ export interface TimelineItem {
 // ─── Basemap ─────────────────────────────────────────────────────────────────
 
 export type BasemapId = 'osm' | 'amap_street' | 'amap_satellite' | 'carto_dark'
+
+export type CoordSys = 'wgs84' | 'gcj02'
+
+export interface BasemapConfig {
+  id: BasemapId
+  label: string
+  tiles: string[]
+  attribution: string
+  maxZoom: number
+  coordSys: CoordSys
+}
 
 // ─── Colormap ────────────────────────────────────────────────────────────────
 
@@ -73,7 +92,7 @@ export interface GridMeta {
     year: number[]
     month: Array<{ year: number; month: number }>
     mean_all: ['mean']
-    mean_month: number[]    // 1–12
+    mean_month: number[]
     mean_season: Season[]
   }
   vars: Record<VarName, { name: VarName; long_name: string; units: string }>
@@ -91,6 +110,12 @@ export interface StatsResponse {
   region_id: RegionId
   granularity: 'year' | 'month'
   vars: Partial<Record<VarName, StatRow[]>>
+}
+
+// Cached data for one region × one var (both granularities)
+export interface RegionStatsCache {
+  year: StatRow[]
+  month: StatRow[]
 }
 
 // ─── Picked point (grid mode) ────────────────────────────────────────────────

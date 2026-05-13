@@ -82,12 +82,12 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - `types/index.ts`：VarName、RegionId、AggMode、Season、FrameSel、BasemapId 等
   - Vite dev proxy：`/api` → `http://localhost:8000/api`、`/grid` → `http://localhost:8000/grid`
 
-- [ ] `TODO` **F-02** `[S]` 全局样式与设计系统
+- [x] `DONE` **F-02** `[S]` 全局样式与设计系统
   - `styles/variables.css`：所有 CSS 变量（`--bg-*`、`--fg-*`、`--accent`、`--font-*`、布局尺寸）
   - 全局 reset，MapLibre 样式覆盖（去圆角、深色控件），自定义滚动条
   - `← needs: F-01`
 
-- [ ] `TODO` **F-03** `[M]` Pinia stores + 配置文件骨架
+- [x] `DONE` **F-03** `[M]` Pinia stores + 配置文件骨架
   - `stores/time.ts`：`mode: AggMode`、`sel: FrameSel`、`playing: boolean`
   - `stores/var.ts`：`selVar: VarName`
   - `stores/region.ts`：`selRegionId: RegionId`、`regions: RegionMeta[]`、`statsCache: Map`
@@ -263,8 +263,8 @@ F-01 → F-02 → F-04 → F-05 → F-06
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 3 | 1 | 0 | 1 | 1 |
 | B 后端 | 4 | 0 | 0 | 4 | 0 |
-| F 前端 | 19 | 1 | 0 | 18 | 0 |
+| F 前端 | 19 | 3 | 0 | 16 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **29** | **2** | **0** | **26** | **1** |
+| **合计** | **29** | **4** | **0** | **24** | **1** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）
