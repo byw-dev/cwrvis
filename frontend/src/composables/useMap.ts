@@ -74,7 +74,7 @@ export function useMap() {
         type: 'canvas',
         canvas,
         coordinates: getGridCorners(basemap),
-        animate: false,  // 手动 play() 触发单帧更新，避免持续渲染
+        animate: true,   // 持续读取 canvas，避免模块切换时 play/pause 竞态导致图层消失
       })
       map.addLayer({
         id: 'grid-overlay-layer',

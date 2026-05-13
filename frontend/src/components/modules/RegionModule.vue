@@ -68,6 +68,7 @@ const frameLabel = computed(() => {
     <Inspector
       v-if="regionStore.selRegion"
       mode="region"
+      :show-history="true"
       :region-name="regionStore.selRegion.name"
       :frame-label="frameLabel"
       :var-name="varStore.selVar"

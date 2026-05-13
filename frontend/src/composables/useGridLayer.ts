@@ -1,5 +1,4 @@
 import { watch, shallowRef, onUnmounted } from 'vue'
-import type { CanvasSource } from 'maplibre-gl'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
@@ -167,7 +166,9 @@ export function useGridLayer() {
     worker.postMessage(req)
   }
 
-  // 将 ImageBitmap 写入共享 canvas，触发 MapLibre canvas source 单帧更新
+  // 将 ImageBitmap 写入共享 canvas。
+  // canvas source 使用 animate:true，MapLibre 每帧自动读取 canvas 内容，
+  // 无需手动 play/pause，彻底消除模块切换时的 rAF 竞态问题。
   function applyBitmap(bmp: ImageBitmap): void {
     const canvas = gridCanvas.value
     if (!canvas) return
@@ -175,16 +176,6 @@ export function useGridLayer() {
     if (!ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-
-    const m = map.value
-    if (!m) return
-    const src = m.getSource('grid-overlay') as CanvasSource | undefined
-    if (!src) return
-    // play() 设置 _playing=true 并调度 repaint，MapLibre 在下一帧正常渲染时
-    // 调用 prepare() 上传纹理（此时 style update 已处理，tiles 已就绪）。
-    // 2-rAF 后再 pause()，确保至少一帧完整渲染后才停止持续动画。
-    src.play()
-    requestAnimationFrame(() => requestAnimationFrame(() => src.pause()))
     renderTick.value++
   }
 
