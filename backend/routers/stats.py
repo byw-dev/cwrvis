@@ -1,9 +1,39 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import Annotated
+from fastapi import APIRouter, HTTPException
 from database import get_db
 from schemas import OkResponse
+from config import VALID_REGION_IDS
 
 router = APIRouter()
+
+VALID_GRANULARITIES = frozenset({"year", "month", "mean_all", "mean_month", "mean_season"})
+
+SEASON_CASE = """
+    CASE
+        WHEN month IN (3,4,5)   THEN 'spring'
+        WHEN month IN (6,7,8)   THEN 'summer'
+        WHEN month IN (9,10,11) THEN 'autumn'
+        ELSE                         'winter'
+    END
+""".strip()
+
+SEASON_ORDER = {"spring": 0, "summer": 1, "autumn": 2, "winter": 3}
+
+
+def _var_columns(conn) -> list[str]:
+    """从 PRAGMA 动态读取 15 个 var 列名，不依赖硬编码。"""
+    fixed = {"region_id", "granularity", "year", "month"}
+    return [r["name"] for r in conn.execute("PRAGMA table_info(region_stats)") if r["name"] not in fixed]
+
+
+def _avg_select(var_cols: list[str]) -> str:
+    return ", ".join(f"AVG({v}) AS {v}" for v in var_cols)
+
+
+def _row_to_dict(row, var_cols: list[str], time_keys: list[str]) -> dict:
+    d = {k: row[k] for k in time_keys if row[k] is not None}
+    for v in var_cols:
+        d[v] = row[v]
+    return d
 
 
 @router.get("/stats", response_model=OkResponse)
@@ -12,32 +42,83 @@ def get_stats(
     granularity: str,
     year_start: int,
     year_end: int,
-    var: Annotated[list[str], Query(min_length=1)],
 ):
-    if granularity not in ("year", "month"):
-        raise HTTPException(400, "granularity 必须为 'year' 或 'month'")
+    if region_id not in VALID_REGION_IDS:
+        raise HTTPException(404, f"未知区域：{region_id}")
+    if granularity not in VALID_GRANULARITIES:
+        raise HTTPException(400, f"granularity 必须为：{', '.join(sorted(VALID_GRANULARITIES))}")
+    if not (2000 <= year_start <= 2025 and 2000 <= year_end <= 2025):
+        raise HTTPException(400, "year_start / year_end 必须在 2000–2025 范围内")
     if year_end < year_start:
         raise HTTPException(400, "year_end 必须 >= year_start")
-    if not var:
-        raise HTTPException(400, "至少指定一个 var")
 
-    placeholders = ",".join("?" * len(var))
-    sql = f"""
-        SELECT year, month, var, value
-        FROM region_stats
-        WHERE region_id = ?
-          AND granularity = ?
-          AND year BETWEEN ? AND ?
-          AND var IN ({placeholders})
-        ORDER BY year, month, var
-    """
     with get_db() as conn:
-        rows = conn.execute(sql, [region_id, granularity, year_start, year_end, *var]).fetchall()
+        var_cols = _var_columns(conn)
+        rows = _query(conn, granularity, region_id, year_start, year_end, var_cols)
 
-    result: dict[str, list] = {}
-    for row in rows:
-        result.setdefault(row["var"], []).append(
-            {"year": row["year"], "month": row["month"], "value": row["value"]}
-        )
+    return OkResponse(data={
+        "region_id":   region_id,
+        "granularity": granularity,
+        "rows":        rows,
+    })
 
-    return OkResponse(data={"region_id": region_id, "granularity": granularity, "vars": result})
+
+def _query(conn, granularity: str, region_id: str, year_start: int, year_end: int, var_cols: list[str]) -> list[dict]:
+    params_base = [region_id, year_start, year_end]
+
+    if granularity == "year":
+        sql = f"""
+            SELECT year, month, {', '.join(var_cols)}
+            FROM region_stats
+            WHERE region_id = ? AND granularity = 'year'
+              AND year BETWEEN ? AND ?
+            ORDER BY year
+        """
+        rows = conn.execute(sql, params_base).fetchall()
+        return [_row_to_dict(r, var_cols, ["year"]) for r in rows]
+
+    if granularity == "month":
+        sql = f"""
+            SELECT year, month, {', '.join(var_cols)}
+            FROM region_stats
+            WHERE region_id = ? AND granularity = 'month'
+              AND year BETWEEN ? AND ?
+            ORDER BY year, month
+        """
+        rows = conn.execute(sql, params_base).fetchall()
+        return [_row_to_dict(r, var_cols, ["year", "month"]) for r in rows]
+
+    if granularity == "mean_all":
+        sql = f"""
+            SELECT {_avg_select(var_cols)}
+            FROM region_stats
+            WHERE region_id = ? AND granularity = 'year'
+              AND year BETWEEN ? AND ?
+        """
+        row = conn.execute(sql, params_base).fetchone()
+        return [{v: row[v] for v in var_cols}]
+
+    if granularity == "mean_month":
+        sql = f"""
+            SELECT month, {_avg_select(var_cols)}
+            FROM region_stats
+            WHERE region_id = ? AND granularity = 'month'
+              AND year BETWEEN ? AND ?
+            GROUP BY month
+            ORDER BY month
+        """
+        rows = conn.execute(sql, params_base).fetchall()
+        return [_row_to_dict(r, var_cols, ["month"]) for r in rows]
+
+    # mean_season
+    sql = f"""
+        SELECT {SEASON_CASE} AS season, {_avg_select(var_cols)}
+        FROM region_stats
+        WHERE region_id = ? AND granularity = 'month'
+          AND year BETWEEN ? AND ?
+        GROUP BY season
+    """
+    rows = conn.execute(sql, params_base).fetchall()
+    result = [_row_to_dict(r, var_cols, ["season"]) for r in rows]
+    result.sort(key=lambda r: SEASON_ORDER.get(r.get("season", ""), 99))
+    return result

@@ -22,6 +22,11 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
 app.include_router(stats.router, prefix="/api/v1")
 app.include_router(report.router, prefix="/api/v1")
 app.include_router(meta.router, prefix="/api/v1")
@@ -29,8 +34,10 @@ app.include_router(meta.router, prefix="/api/v1")
 # 静态文件挂载（/ 必须最后挂载）
 _s = Path(settings.static_root)
 if (_s / "grid").is_dir():
-    app.mount("/grid", StaticFiles(directory=_s / "grid"), name="grid")
+    app.mount("/grid",    StaticFiles(directory=_s / "grid"),           name="grid")
+if (_s / "shapes").is_dir():
+    app.mount("/shapes",  StaticFiles(directory=_s / "shapes"),         name="shapes")
 if (_s / "reports").is_dir():
-    app.mount("/reports", StaticFiles(directory=_s / "reports"), name="reports")
+    app.mount("/reports", StaticFiles(directory=_s / "reports"),        name="reports")
 if (_s / "web").is_dir():
-    app.mount("/", StaticFiles(directory=_s / "web", html=True), name="web")
+    app.mount("/",        StaticFiles(directory=_s / "web", html=True), name="web")

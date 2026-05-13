@@ -67,25 +67,25 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 > B 系列与前端 F 系列独立，可与 F-01~F-10 并行推进。
 
-- [ ] `TODO` **B-01** `[S]` FastAPI 入口完善（`backend/main.py`）
+- [x] `DONE` **B-01** `[S]` FastAPI 入口完善（`backend/main.py`）
   - 挂载路由：`/api/v1/stats`、`/api/v1/report`、`/api/v1/meta`
   - StaticFiles 挂载：`/grid` → `GRID_DIR`、`/shapes` → `SHAPES_DIR`、`/` → 前端 build 产物
   - 开发阶段 CORS 配置（允许 localhost:5173）
   - `backend/config.py`：`REGION_MAP` 定义（8 个区域的 id→中文名映射）
 
-- [ ] `TODO` **B-02** `[M]` `/api/v1/stats` 接口（`routers/stats.py`）
+- [x] `DONE` **B-02** `[M]` `/api/v1/stats` 接口（`routers/stats.py`）
   - 参数：`region_id`、`granularity`（5 种：`year`/`month`/`mean_all`/`mean_month`/`mean_season`）、`year_start`、`year_end`（2000–2025）；无 var 过滤参数，一次返回全部 15 个 var
   - 按 granularity 路由到对应 SQL（原始 SELECT / `AVG+GROUP BY month` / `AVG+GROUP BY season`）；详见 `data-pipeline.md` SQL 示例
   - 返回结构：`{ region_id, granularity, rows: [{year?, month?, season?, SP, CWR, ...}] }`
   - 参数校验：region_id 不存在 → 404；granularity 非法 → 400；year 范围非法 → 400
   - `← needs: B-01`，需要 `stats.db`（若 S-02 未完成可用空数据库开发接口骨架）
 
-- [ ] `TODO` **B-03** `[S]` `/api/v1/report/download` 接口（`routers/report.py`）
+- [x] `DONE` **B-03** `[S]` `/api/v1/report/download` 接口（`routers/report.py`）
   - 按 `{region_id}_{granularity}_{start}_{end}.docx` 拼接路径，`FileResponse` 返回
   - 文件不存在 → 404 JSON；路径穿越校验（只允许访问 `REPORT_DIR` 内文件）
   - `← needs: B-01`
 
-- [ ] `TODO` **B-04** `[S]` `/api/v1/meta/regions` 接口（`routers/meta.py`）
+- [x] `DONE` **B-04** `[S]` `/api/v1/meta/regions` 接口（`routers/meta.py`）
   - 从 `REGION_MAP` 硬编码返回区域列表（`region_id`、`name`、`level`）
   - 无数据库查询
   - `← needs: B-01`
@@ -283,9 +283,9 @@ F-01 → F-02 → F-04 → F-05 → F-06
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 4 | 4 | 0 | 0 | 0 |
-| B 后端 | 4 | 0 | 0 | 4 | 0 |
+| B 后端 | 4 | 4 | 0 | 0 | 0 |
 | F 前端 | 19 | 5 | 0 | 14 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **30** | **9** | **0** | **21** | **0** |
+| **合计** | **30** | **13** | **0** | **17** | **0** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）
