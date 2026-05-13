@@ -1,5 +1,5 @@
 import { watch, onUnmounted } from 'vue'
-import type { ImageSource } from 'maplibre-gl'
+import type { CanvasSource } from 'maplibre-gl'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
@@ -49,7 +49,7 @@ const imageCache = new LruCache<ImageBitmap>(20)
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useGridLayer() {
-  const { map }     = useMap()
+  const { map, gridCanvas } = useMap()
   const timeStore   = useTimeStore()
   const varStore    = useVarStore()
   const settings    = useSettingsStore()
@@ -63,7 +63,6 @@ export function useGridLayer() {
   worker.onmessage = (e: MessageEvent<RenderResponse>) => {
     const { imageBitmap, frameKey } = e.data
     imageCache.set(frameKey, imageBitmap)
-    // If this is still the frame we need, push to map
     if (frameKey === currentFrameKey()) {
       applyBitmap(imageBitmap)
     }
@@ -108,13 +107,29 @@ export function useGridLayer() {
     const cmName = settings.getColormap(varName as any)
     const lut    = getLut(cmName)
 
+    // 若配置的 vmin/vmax 是占位值（量程内无任何数据点），则从帧数据自动计算
+    let vmin = meta.vmin
+    let vmax = meta.vmax
+    const hasDataInRange = frame2d.some(row => row.some(v => v !== null && v > vmin && v < vmax))
+    if (!hasDataInRange) {
+      let dataMin = Infinity, dataMax = -Infinity
+      for (const row of frame2d) {
+        for (const v of row) {
+          if (v === null) continue
+          if (v < dataMin) dataMin = v
+          if (v > dataMax) dataMax = v
+        }
+      }
+      if (dataMin <= dataMax) { vmin = dataMin; vmax = dataMax }
+    }
+
     const req: RenderRequest = {
       frame2d,
       lut,
-      vmin:      meta.vmin,
-      vmax:      meta.vmax,
-      threshMin: varStore.threshMin ?? meta.vmin,
-      threshMax: varStore.threshMax ?? meta.vmax,
+      vmin,
+      vmax,
+      threshMin: varStore.threshMin ?? vmin,
+      threshMax: varStore.threshMax ?? vmax,
       targetW:   600,
       targetH:   400,
       frameKey:  frameKey(varName, mode, idx),
@@ -122,24 +137,22 @@ export function useGridLayer() {
     worker.postMessage(req)
   }
 
+  // 将 ImageBitmap 写入共享 canvas，触发 MapLibre canvas source 单帧更新
   function applyBitmap(bmp: ImageBitmap): void {
-    const m = map.value
-    if (!m?.isStyleLoaded()) return
-    try {
-      const src = m.getSource('grid-overlay') as ImageSource | undefined
-      if (!src) return
-      const url = bitmapToObjectUrl(bmp)
-      src.updateImage({ url })
-    } catch { /* map not ready */ }
-  }
+    const canvas = gridCanvas.value
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
 
-  // ImageBitmap → object URL for MapLibre updateImage
-  function bitmapToObjectUrl(bmp: ImageBitmap): string {
-    const canvas = document.createElement('canvas')
-    canvas.width  = bmp.width
-    canvas.height = bmp.height
-    canvas.getContext('2d')!.drawImage(bmp, 0, 0)
-    return canvas.toDataURL()  // synchronous for small bitmaps
+    const m = map.value
+    if (!m) return
+    const src = m.getSource('grid-overlay') as CanvasSource | undefined
+    if (!src) return
+    // play() 调度 repaint；pause() 立即调用 prepare() 上传纹理到 GPU，repaint 时直接显示
+    src.play()
+    src.pause()
   }
 
   async function renderCurrent(): Promise<void> {
@@ -148,11 +161,9 @@ export function useGridLayer() {
     const idx     = timeStore.currentIndex
     const key     = frameKey(varName, mode, idx)
 
-    // Cache hit
     const cached = imageCache.get(key)
     if (cached) { applyBitmap(cached); preload(varName, mode, idx); return }
 
-    // Fetch JSON then render
     const data = await loadJson(varName, mode)
     if (!data) return
     const frame = data[idx]
@@ -187,6 +198,19 @@ export function useGridLayer() {
     ],
     () => { renderCurrent() },
     { immediate: true },
+  )
+
+  // Re-render when map becomes ready (handles race between data fetch and map init)
+  watch(
+    () => map.value,
+    (m) => {
+      if (!m) return
+      if (m.isStyleLoaded()) {
+        renderCurrent()
+      } else {
+        m.once('load', () => renderCurrent())
+      }
+    },
   )
 
   onUnmounted(() => { worker.terminate() })

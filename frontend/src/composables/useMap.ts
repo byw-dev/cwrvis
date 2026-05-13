@@ -1,10 +1,10 @@
-import { shallowRef, readonly, watch } from 'vue'
-import maplibregl, { type Map as MaplibreMap, type ImageSource, type RasterTileSource } from 'maplibre-gl'
+import { shallowRef, shallowReadonly, watch } from 'vue'
+import maplibregl, { type Map as MaplibreMap, type CanvasSource, type RasterTileSource } from 'maplibre-gl'
 import { useSettingsStore } from '@/stores/settings'
 import { BASEMAPS } from '@/config/basemaps'
 import type { BasemapConfig } from '@/types'
 
-// 格点 ImageSource 的四角坐标（[tl, tr, br, bl]，MapLibre 顺序）
+// 格点覆盖层的四角坐标（[tl, tr, br, bl]，MapLibre 顺序）
 // 格点原始边界：lon 75–100°E, lat 25–40°N（外扩 0.5° 覆盖边缘格点单元）
 function getGridCorners(basemap: BasemapConfig): [[number, number], [number, number], [number, number], [number, number]] {
   const [w, e, s, n] = [75.0, 100.0, 25.0, 40.0]
@@ -17,14 +17,11 @@ function getGridCorners(basemap: BasemapConfig): [[number, number], [number, num
   ]
 }
 
-// 1×1 透明 PNG，用于 grid-overlay ImageSource 初始占位
-const TRANSPARENT_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQ' +
-  'AABjkB6QAAAABJRU5ErkJggg=='
-
 // ─── 模块级单例：grid / region 模块共享同一 Map 实例 ───────────────────────
 
 const _map = shallowRef<MaplibreMap | null>(null)
+// Canvas source 不依赖异步图片加载，draw 操作同步完成后 play() 即可显示
+const _gridCanvas = shallowRef<HTMLCanvasElement | null>(null)
 
 export function useMap() {
   const settings = useSettingsStore()
@@ -33,6 +30,14 @@ export function useMap() {
     if (_map.value) return  // 已初始化，不重复创建
 
     const basemap = BASEMAPS[settings.basemap]
+
+    // 与 Worker targetW/targetH 保持一致；须挂载到 DOM，MapLibre canvas source 才能正常读取
+    const canvas = document.createElement('canvas')
+    canvas.width  = 600
+    canvas.height = 400
+    canvas.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none'
+    document.body.appendChild(canvas)
+    _gridCanvas.value = canvas
 
     const map = new maplibregl.Map({
       container,
@@ -52,7 +57,7 @@ export function useMap() {
           { id: 'basemap-layer', type: 'raster', source: 'basemap' },
         ],
       },
-      center: [87.75, 32.5],   // 西藏中心
+      center: [87.75, 32.5],
       zoom: 5,
       minZoom: 3,
       maxZoom: 12,
@@ -64,12 +69,12 @@ export function useMap() {
       'bottom-right',
     )
 
-    // 地图加载完成后，添加格点图层占位 source/layer（useGridLayer 将更新 url）
     map.on('load', () => {
       map.addSource('grid-overlay', {
-        type: 'image',
-        url: TRANSPARENT_PNG,
+        type: 'canvas',
+        canvas,
         coordinates: getGridCorners(basemap),
+        animate: false,  // 手动 play() 触发单帧更新，避免持续渲染
       })
       map.addLayer({
         id: 'grid-overlay-layer',
@@ -88,6 +93,8 @@ export function useMap() {
   function destroyMap(): void {
     _map.value?.remove()
     _map.value = null
+    _gridCanvas.value?.remove()
+    _gridCanvas.value = null
   }
 
   // 底图切换：更新瓦片 URL + 格点图层四角坐标
@@ -102,14 +109,15 @@ export function useMap() {
       rasterSrc?.setTiles(basemap.tiles)
 
       if (map.isStyleLoaded()) {
-        const imgSrc = map.getSource('grid-overlay') as ImageSource | undefined
-        imgSrc?.setCoordinates(getGridCorners(basemap))
+        const canvasSrc = map.getSource('grid-overlay') as CanvasSource | undefined
+        canvasSrc?.setCoordinates(getGridCorners(basemap))
       }
     },
   )
 
   return {
-    map: readonly(_map),
+    map: shallowReadonly(_map),
+    gridCanvas: shallowReadonly(_gridCanvas),
     initMap,
     destroyMap,
   }
