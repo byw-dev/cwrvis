@@ -44,11 +44,13 @@ cwrvis/
 │   ├── netcdf_to_json.py      # netcdf → 格点 JSON 切片
 │   └── netcdf_to_sqlite.py    # netcdf × shape → SQLite 区域统计
 │
-├── backend/                   # FastAPI 后端
-│   ├── main.py
+├── backend/                   # FastAPI 后端（打包时映射为 app/）
+│   ├── main.py                # 入口：挂载路由 + StaticFiles
 │   ├── routers/
-│   ├── models/
-│   └── requirements.txt
+│   ├── config.py
+│   ├── database.py
+│   ├── schemas.py
+│   └── pyproject.toml         # 依赖声明（uv 管理）
 │
 ├── frontend/                  # Vue 3 前端
 │   ├── src/
@@ -60,8 +62,21 @@ cwrvis/
 │   └── package.json
 │
 └── deploy/
-    ├── nginx.conf
     └── systemd/
+        └── cwrvis.service     # systemd 服务单元文件
+```
+
+**分发包结构**（`bin/start.sh` 解压即运行，见 `docs/design/deployment.md`）：
+```
+cwrvis-{version}/
+├── bin/start.sh  stop.sh
+├── app/          ← backend/ 内容
+├── static/grid/  ← 格点 JSON（预生成）
+├── static/web/   ← 前端 build 产物
+├── static/reports/
+├── db/stats.db   ← 不对外暴露
+├── conf/config.env
+└── logs/
 ```
 
 ---
@@ -310,17 +325,19 @@ chore(scripts): 新增 netcdf 批量预生成脚本
 
 ## 环境变量
 
-后端（`backend/.env`）：
+后端（`conf/config.env`，开发时可放 `backend/.env`）：
 ```
-DB_PATH=/data/static/db/stats.db
-STATIC_ROOT=/data/static
-REPORT_DIR=/data/static/reports
+PORT=8000
+DB_PATH=../db/stats.db
+STATIC_ROOT=../static
+REPORT_DIR=../static/reports
+GRID_DIR=../static/grid
 ```
 
 前端（`frontend/.env`）：
 ```
 VITE_API_BASE=/api/v1
-VITE_GRID_BASE=/static/grid
+VITE_GRID_BASE=/grid
 VITE_AMAP_KEY=你的高德Key
 ```
 

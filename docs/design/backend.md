@@ -11,9 +11,10 @@
 
 1. 提供区域统计数据查询接口（读取 SQLite）
 2. 提供报告文件下载接口（按命名规则定位预生成 docx）
-3. 提供元数据接口（var 列表、区域列表）
+3. 提供元数据接口（区域列表）
+4. 通过 `StaticFiles` 挂载托管格点 JSON、前端页面等静态资产
 
-格点 JSON 文件由 Nginx 直接托管，后端不参与。
+格点 JSON（`/grid/**`）、前端页面（`/`）均由 FastAPI `StaticFiles` 直接服务，不经过应用逻辑。`db/stats.db` 不挂载为静态路由，仅在代码内部访问。
 
 ---
 
@@ -21,15 +22,15 @@
 
 ```
 backend/
-├── main.py              # FastAPI 应用入口，挂载路由
+├── main.py              # FastAPI 应用入口，挂载路由与 StaticFiles
 ├── config.py            # 配置（读取环境变量）
 ├── database.py          # SQLite 连接管理
 ├── routers/
 │   ├── stats.py         # /api/v1/stats
 │   ├── report.py        # /api/v1/report
-│   └── meta.py          # /api/v1/meta
+│   └── meta.py          # /api/v1/meta/regions
 ├── schemas.py           # Pydantic 响应模型
-└── requirements.txt
+└── pyproject.toml       # 依赖声明（uv 管理）
 ```
 
 ---
@@ -172,32 +173,6 @@ filepath = REPORT_DIR / filename
 
 ---
 
-### GET `/api/v1/meta/vars`
-
-返回所有 data_var 的元数据。
-
-**响应**：
-```json
-{
-  "ok": true,
-  "data": {
-    "precipitation": {
-      "label": "年降水量",
-      "unit": "mm",
-      "description": "区域年累计降水量",
-      "colorScale": [...],
-      "valueMin": 0,
-      "valueMax": 2000
-    },
-    ...
-  }
-}
-```
-
-实现：直接读取 `/static/meta/vars.json` 文件内容并返回。
-
----
-
 ### GET `/api/v1/meta/regions`
 
 返回所有预设区域的元数据，包含 GeoJSON 几何用于前端渲染。
@@ -233,13 +208,14 @@ filepath = REPORT_DIR / filename
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    db_path: str = "/data/static/db/stats.db"
-    static_root: str = "/data/static"
-    report_dir: str = "/data/static/reports"
-    meta_vars_path: str = "/data/static/meta/vars.json"
+    db_path: str = "../db/stats.db"
+    static_root: str = "../static"
+    report_dir: str = "../static/reports"
+    grid_dir: str = "../static/grid"
+    port: int = 8000
 
     class Config:
-        env_file = ".env"
+        env_file = "../conf/config.env"
 
 settings = Settings()
 ```
@@ -251,15 +227,15 @@ settings = Settings()
 开发环境：
 ```bash
 cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-生产环境（systemd，见 `deploy/` 目录）：
+生产环境通过分发包的 `bin/start.sh` 启动（见 `deployment.md`），内部使用：
 ```bash
-uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
 ```
 
-生产环境使用 2 个 worker 足够（后端几乎无 CPU 计算）。
+2 个 worker 足够（后端几乎无 CPU 计算）。
 
 ---
 
@@ -269,13 +245,19 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
 
 ---
 
-## requirements.txt
+## 依赖（`backend/pyproject.toml`）
 
-```
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic-settings>=2.0.0
-python-multipart>=0.0.9
+```toml
+[project]
+name = "cwrvis-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic-settings>=2.0.0",
+    "python-multipart>=0.0.9",
+]
 ```
 
 无需 SQLAlchemy、numpy、xarray 等重型依赖，运行时后端极轻量。
