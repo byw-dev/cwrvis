@@ -9,6 +9,7 @@ import LeftRail from '@/components/layout/LeftRail.vue'
 import GridModule from '@/components/modules/GridModule.vue'
 import RegionModule from '@/components/modules/RegionModule.vue'
 import ExportModule from '@/components/modules/ExportModule.vue'
+import SettingsPanel from '@/components/panels/SettingsPanel.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
@@ -57,13 +58,7 @@ const showMap = computed(() =>
 
     <BottomBar v-if="showBottomBar" />
 
-    <!-- F-18: SettingsPanel — placeholder until implemented -->
-    <div v-if="settingsOpen" class="settings-backdrop" @click="settingsOpen = false">
-      <div class="settings-stub" @click.stop>
-        <p style="font-family: var(--font-mono); color: var(--fg-1);">设置面板（F-18，待实现）</p>
-        <button @click="settingsOpen = false" style="color: var(--accent); background: none; border: none; cursor: pointer;">关闭</button>
-      </div>
-    </div>
+    <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
   </template>
 </template>
 
@@ -81,24 +76,4 @@ const showMap = computed(() =>
 .loading { color: var(--fg-3); }
 .err     { color: var(--warn); }
 
-.settings-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(7, 9, 12, 0.6);
-  backdrop-filter: blur(4px);
-  z-index: 1500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.settings-stub {
-  background: var(--bg-1);
-  border: 1px solid var(--line-3);
-  padding: 32px 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
 </style>
