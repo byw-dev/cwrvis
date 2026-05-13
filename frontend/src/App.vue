@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useMetaStore } from '@/stores/meta'
 import ProductNav from '@/components/layout/ProductNav.vue'
 import BottomBar from '@/components/layout/BottomBar.vue'
+import MapView from '@/components/map/MapView.vue'
 import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
@@ -12,6 +13,9 @@ const settingsOpen = ref(false)
 
 // BottomBar is only relevant for data-viewing modules
 const showBottomBar = computed(() =>
+  activeModule.value === 'grid' || activeModule.value === 'region'
+)
+const showMap = computed(() =>
   activeModule.value === 'grid' || activeModule.value === 'region'
 )
 </script>
@@ -32,9 +36,11 @@ const showBottomBar = computed(() =>
       @open-settings="settingsOpen = true"
     />
 
-    <!-- Module area (each module is responsible for its own positioning) -->
-    <!-- F-08~F-16: GridModule / RegionModule / ExportModule to be implemented -->
-    <PlaceholderModule :module-id="activeModule" />
+    <!-- 地图底层（grid / region 模块共享，v-show 保持实例存活）-->
+    <MapView v-show="showMap" />
+
+    <!-- 模块内容层（F-11/F-15 实现后替换占位） -->
+    <PlaceholderModule v-if="!showMap" :module-id="activeModule" />
 
     <BottomBar v-if="showBottomBar" />
 
