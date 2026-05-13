@@ -15,27 +15,25 @@ export interface RenderRequest {
 }
 
 export interface RenderResponse {
-  imageBitmap: ImageBitmap
+  pixels: ArrayBuffer  // Uint8ClampedArray buffer，长度 targetW * targetH * 4
+  width: number
+  height: number
   frameKey: string
 }
 
 // ─── Worker 主逻辑 ────────────────────────────────────────────────────────────
 
-self.onmessage = async (e: MessageEvent<RenderRequest>) => {
+self.onmessage = (e: MessageEvent<RenderRequest>) => {
   const { frame2d, lut, vmin, vmax, threshMin, threshMax, targetW, targetH, frameKey } = e.data
 
   const nLat = frame2d.length
   const nLon = frame2d[0]?.length ?? 0
 
-  const canvas = new OffscreenCanvas(targetW, targetH)
-  const ctx = canvas.getContext('2d')!
-  const imgData = ctx.createImageData(targetW, targetH)
-  const pixels = imgData.data   // Uint8ClampedArray，长度 targetW * targetH * 4
+  const pixels = new Uint8ClampedArray(targetW * targetH * 4)
 
-  const vRange = vmax - vmin    // 用于 LUT 索引归一化
+  const vRange = vmax - vmin
 
   for (let py = 0; py < targetH; py++) {
-    // 目标像素 y → 格点纬度索引（连续）
     const gy = (py / (targetH - 1)) * (nLat - 1)
     const gy0 = Math.floor(gy)
     const gy1 = Math.min(gy0 + 1, nLat - 1)
@@ -43,14 +41,12 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     const ty1 = 1 - ty
 
     for (let px = 0; px < targetW; px++) {
-      // 目标像素 x → 格点经度索引（连续）
       const gx = (px / (targetW - 1)) * (nLon - 1)
       const gx0 = Math.floor(gx)
       const gx1 = Math.min(gx0 + 1, nLon - 1)
       const tx  = gx - gx0
       const tx1 = 1 - tx
 
-      // 双线性插值权重
       const w00 = tx1 * ty1
       const w01 = tx  * ty1
       const w10 = tx1 * ty
@@ -61,7 +57,6 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
       const v10 = frame2d[gy1][gx0]
       const v11 = frame2d[gy1][gx1]
 
-      // 跳过全为缺测的像素
       let wSum = 0
       let vSum = 0
       if (v00 !== null) { vSum += v00 * w00; wSum += w00 }
@@ -71,21 +66,12 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
 
       const pidx = (py * targetW + px) * 4
 
-      if (wSum === 0) {
-        // 全部缺测 → 透明
-        pixels[pidx + 3] = 0
-        continue
-      }
+      if (wSum === 0) { pixels[pidx + 3] = 0; continue }
 
       const value = vSum / wSum
 
-      // 阈值过滤
-      if (value < threshMin || value > threshMax) {
-        pixels[pidx + 3] = 0
-        continue
-      }
+      if (value < threshMin || value > threshMax) { pixels[pidx + 3] = 0; continue }
 
-      // LUT 查表：归一化到 [0, 255]
       const lutIdx = vRange > 0
         ? Math.max(0, Math.min(255, Math.round(((value - vmin) / vRange) * 255)))
         : 0
@@ -98,11 +84,8 @@ self.onmessage = async (e: MessageEvent<RenderRequest>) => {
     }
   }
 
-  ctx.putImageData(imgData, 0, 0)
-  const imageBitmap = await createImageBitmap(canvas)
-
   ;(self as DedicatedWorkerGlobalScope).postMessage(
-    { imageBitmap, frameKey } satisfies RenderResponse,
-    [imageBitmap],
+    { pixels: pixels.buffer, width: targetW, height: targetH, frameKey } satisfies RenderResponse,
+    [pixels.buffer],
   )
 }

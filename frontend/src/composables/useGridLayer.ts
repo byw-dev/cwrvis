@@ -9,6 +9,8 @@ import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
 import type { AggMode } from '@/types'
 
+type FrameData = { imageData: ImageData }
+
 const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/grid'
 
 // 每次帧渲染完毕（applyBitmap）时递增，供外部 watch 数据就绪
@@ -42,7 +44,7 @@ const GRAN_PATH: Record<AggMode, string> = {
 // JSON cache: `{var}_{gran}` → all frames data
 const jsonCache = new Map<string, (number | null)[][][]>()
 
-// ── LRU ImageBitmap cache ─────────────────────────────────────────────────────
+// ── LRU frame cache ───────────────────────────────────────────────────────────
 
 class LruCache<V> {
   private map = new Map<string, V>()
@@ -54,24 +56,19 @@ class LruCache<V> {
     if (this.map.has(key)) this.map.delete(key)
     this.map.set(key, val)
     if (this.map.size > this.max) {
-      const oldest = this.map.keys().next().value
-      const evicted = this.map.get(oldest)
+      const oldest = this.map.keys().next().value!
       this.map.delete(oldest)
-      if (evicted instanceof ImageBitmap) evicted.close()
     }
   }
 
   has(key: string): boolean { return this.map.has(key) }
 
   clear(): void {
-    for (const val of this.map.values()) {
-      if (val instanceof ImageBitmap) val.close()
-    }
     this.map.clear()
   }
 }
 
-const imageCache = new LruCache<ImageBitmap>(20)
+const imageCache = new LruCache<FrameData>(20)
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
@@ -86,12 +83,13 @@ export function useGridLayer() {
     { type: 'module' },
   )
 
-  // Receive rendered ImageBitmap from Worker
+  // Receive rendered pixels from Worker
   worker.onmessage = (e: MessageEvent<RenderResponse>) => {
-    const { imageBitmap, frameKey } = e.data
-    imageCache.set(frameKey, imageBitmap)
+    const { pixels, width, height, frameKey } = e.data
+    const frameData: FrameData = { imageData: new ImageData(new Uint8ClampedArray(pixels), width, height) }
+    imageCache.set(frameKey, frameData)
     if (frameKey === currentFrameKey()) {
-      applyBitmap(imageBitmap)
+      applyBitmap(frameData)
     }
   }
 
@@ -166,16 +164,12 @@ export function useGridLayer() {
     worker.postMessage(req)
   }
 
-  // 将 ImageBitmap 写入共享 canvas。
-  // canvas source 使用 animate:true，MapLibre 每帧自动读取 canvas 内容，
-  // 无需手动 play/pause，彻底消除模块切换时的 rAF 竞态问题。
-  function applyBitmap(bmp: ImageBitmap): void {
+  function applyBitmap(frame: FrameData): void {
     const canvas = gridCanvas.value
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    ctx.putImageData(frame.imageData, 0, 0)
     renderTick.value++
   }
 

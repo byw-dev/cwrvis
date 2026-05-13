@@ -88,6 +88,7 @@ export function useMap() {
     })
 
     _map.value = map
+    ;(window as any).__devMap = map
   }
 
   function destroyMap(): void {
