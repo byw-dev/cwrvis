@@ -134,15 +134,44 @@
 
 ### DEC-012：区域统计聚合模式（年平均/月平均/季平均）在前端计算
 
-**状态**：Active  
-**决策**：区域统计的统计类聚合（年平均、月平均、季平均）通过前端从已加载的逐年/逐月原始数据计算，不预生成也不新增后端接口。  
-**背景**：后端 `/api/v1/stats` 只提供 `year` / `month` 两种 granularity，与预生成脚本保持一致。  
-**原因**：
-- 单个 region + var 的全量数据量极小（year: 26行，month: 312行），一次加载即可
-- 三种均值计算（算术平均、按月分组、按季分组）逻辑简单，前端 <1ms 可完成
-- 避免新增后端接口或预生成数据文件
+**状态**：Superseded by DEC-014  
+**决策**：~~区域统计的统计类聚合通过前端从已加载的逐年/逐月原始数据计算~~（已废弃）  
 
-**代价**：首次切换统计模式前需等待 year + month 数据加载完成（<1s）。
+---
+
+### DEC-014：SQLite 宽表 schema，后端 SQL 承担全部时间聚合
+
+**状态**：Active（Supersedes DEC-012）  
+**决策**：
+1. `region_stats` 表改为宽表，15 个 var 各占一列，不再有 `var`/`value` 两列；表中只存储 `year` / `month` 两种 granularity 的原始值。
+2. 后端 `/api/v1/stats` 扩展支持 5 种 granularity（`year` / `month` / `mean_all` / `mean_month` / `mean_season`），后三种通过 SQL `AVG` + `GROUP BY` 在查询时实时计算。
+3. 接口不再接受 `var` 过滤参数，每次请求返回全部 15 个 var 的数据。
+
+**背景**：DEC-012 让脚本只生成 year/month 原始数据，但三种聚合模式交由前端客户端计算，导致"统计口径"的可替换性无法从脚本延伸到聚合层，且架构上破坏了"预计算优先"原则。  
+**原因**：
+- 统计口径完全由脚本和 SQL 决定，前端无计算逻辑，口径一致性有保障
+- SQLite 宽表对 `AVG`/`GROUP BY` 的性能远超需求（< 1ms）
+- 取消 `var` 过滤简化了 API，单次请求即可获取所有变量
+- 宽表行数大幅减少（2,704 行，原设计约 40,560 行）
+
+**代价**：SQLite schema 中 var 列名硬编码；新增变量需 schema migration；`mean_all` / `mean_month` / `mean_season` 的计算在查询时完成而非预存（数据量极小，可接受）。
+
+---
+
+### DEC-015：空间聚合算法通过 Strategy Pattern 可替换
+
+**状态**：Active  
+**决策**：`scripts/netcdf_to_sqlite.py` 中的"格点×区域"空间聚合逻辑抽象为 `RegionAggregator` ABC，提供两个实现，通过 `--method` CLI 参数选择。开发阶段可对比两种方法的输出；部署时只保留一种。
+
+| 实现类 | CLI 值 | 空间逻辑 | 聚合算子 |
+|--------|--------|---------|---------|
+| `AreaWeightedMean` | `area_weighted` | 计算格点与区域多边形的面积重叠权重（geopandas） | 加权平均（所有 var） |
+| `PointInBoundary` | `point_in_boundary` | 仅取中心点落在边界内的格点（shapely）| SUM（单位 kg）/ 算术平均（单位 % / day / hour） |
+
+`prepare(region_geom, grid_lats, grid_lons)` 每个区域调用一次（缓存权重/掩码），`aggregate(frame_2d, var_unit)` 每帧调用。  
+**背景**：不同科学问题对"区域代表值"的定义不同（总量 vs. 平均态）；算法可替换性是开发阶段的明确需求。  
+**原因**：Strategy Pattern 将算法与流程解耦，切换方法无需修改主流程代码。  
+**代价**：OOP 结构增加少量代码量；`PointInBoundary` 的 SUM/MEAN 分派逻辑依赖 var 单位（当前数据集 var 单位固定，可接受）。
 
 ---
 

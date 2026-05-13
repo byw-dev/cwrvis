@@ -69,74 +69,70 @@ backend/
 
 ### GET `/api/v1/stats`
 
-查询指定区域在指定时间范围内的统计数据。
+查询指定区域在指定时间范围内的统计数据。接口返回全部 15 个 var，无需传 var 过滤参数。
 
 **请求参数**（Query String）：
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `region_id` | string | ✅ | 区域标识符，对应 regions 表 |
-| `granularity` | string | ✅ | `year` 或 `month` |
-| `year_start` | int | ✅ | 起始年份，范围 2000–2024 |
-| `year_end` | int | ✅ | 结束年份，≥ year_start |
-| `var` | string | ✅ | var 名称，可重复传入多个 |
+| `region_id` | string | ✅ | 区域标识符 |
+| `granularity` | string | ✅ | `year` / `month` / `mean_all` / `mean_month` / `mean_season` |
+| `year_start` | int | ✅ | 起始年份，范围 2000–2025 |
+| `year_end` | int | ✅ | 结束年份，≥ year_start；对三种 mean 粒度定义均值计算窗口 |
+
+**响应结构**：`data` 为数组，每个元素为一个时间点的全部 var 数值；时间维度字段随 granularity 变化：
+
+| granularity | 时间字段 | 帧数 |
+|------------|---------|------|
+| `year` | `year` | 26（或指定范围） |
+| `month` | `year`, `month` | 312（或指定范围） |
+| `mean_all` | ——（单行） | 1 |
+| `mean_month` | `month`（1–12） | 12 |
+| `mean_season` | `season`（`spring`/`summer`/`autumn`/`winter`） | 4 |
 
 **响应示例**（granularity=year）：
 ```json
 {
   "ok": true,
   "data": {
-    "region_id": "region_a",
+    "region_id": "xizang",
     "granularity": "year",
-    "vars": {
-      "precipitation": [
-        { "year": 2000, "month": null, "value": 523.4 },
-        { "year": 2001, "month": null, "value": 489.1 },
-        ...
-      ],
-      "temperature": [
-        { "year": 2000, "month": null, "value": 12.3 },
-        ...
-      ]
-    }
+    "rows": [
+      { "year": 2000, "SP": 1234.5, "CWR": 523.4, "aveMv": 88.1, "CEv": 45.2, ... },
+      { "year": 2001, "SP": 1189.2, "CWR": 489.1, ... },
+      ...
+    ]
   }
 }
 ```
 
-**响应示例**（granularity=month）：
+**响应示例**（granularity=mean_season）：
 ```json
 {
   "ok": true,
   "data": {
-    "region_id": "region_a",
-    "granularity": "month",
-    "vars": {
-      "precipitation": [
-        { "year": 2020, "month": 1, "value": 23.1 },
-        { "year": 2020, "month": 2, "value": 18.4 },
-        ...
-      ]
-    }
+    "region_id": "xizang",
+    "granularity": "mean_season",
+    "rows": [
+      { "season": "spring", "SP": 320.1, "CWR": 140.2, ... },
+      { "season": "summer", "SP": 580.3, "CWR": 250.7, ... },
+      { "season": "autumn", "SP": 290.4, "CWR": 120.5, ... },
+      { "season": "winter", "SP":  80.1, "CWR":  35.2, ... }
+    ]
   }
 }
 ```
 
-**SQL 实现（核心逻辑）**：
-```sql
-SELECT year, month, var, value
-FROM region_stats
-WHERE region_id = ?
-  AND granularity = ?
-  AND year BETWEEN ? AND ?
-  AND var IN (?, ?, ...)
-ORDER BY year, month, var;
-```
+**SQL 实现（核心逻辑，见 `data-pipeline.md` 完整 SQL 示例）**：
+
+- `year` / `month`：`SELECT year, month, SP, CWR, ... WHERE region_id=? AND granularity=? AND year BETWEEN ? AND ?`
+- `mean_all`：`SELECT AVG(SP), AVG(CWR), ... WHERE granularity='year' AND year BETWEEN ? AND ?`
+- `mean_month`：`AVG(...) GROUP BY month`，源数据 `granularity='month'`
+- `mean_season`：`AVG(...) GROUP BY CASE WHEN month IN (3,4,5) THEN 'spring' ...`
 
 **参数校验**：
-- `granularity` 必须为 `year` 或 `month`
-- `year_start` 和 `year_end` 在 [2000, 2025] 范围内
-- `year_end >= year_start`
-- `var` 列表不得为空，且每个值必须在已知 var 列表中
+- `granularity` 必须为 5 个合法值之一
+- `year_start` 和 `year_end` 在 [2000, 2025] 范围内，且 `year_end >= year_start`
 - `region_id` 必须在 `REGION_IDS`（见 config.py）中
 
 ---

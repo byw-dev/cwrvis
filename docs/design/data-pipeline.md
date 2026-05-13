@@ -163,73 +163,179 @@ uv run python scripts/netcdf_to_json.py \
 
 ### 功能
 
-将每个预设区域与 netcdf 格点数据做空间叠加计算，提取区域内格点的面积加权平均值，存入 SQLite 数据库。
+对每个预设区域 × netcdf 格点数据做空间叠加计算，将结果写入 SQLite 宽表。表中只存储 `year` / `month` 两种原始粒度；`mean_all` / `mean_month` / `mean_season` 三种聚合值在查询时由 SQL `AVG + GROUP BY` 实时计算，不预存。
 
-### 统计方法
+坐标系：`data/shapes/` 中的 GeoJSON 与 netcdf 格点均视为 WGS-84 直接使用（1° 格点粒度下 GCJ-02 偏移量可忽略，见 DEC-005）。
+
+---
+
+### 空间聚合策略（Strategy Pattern）
+
+空间聚合逻辑抽象为 `RegionAggregator` ABC，两种实现通过 `--method` CLI 参数选择：
 
 ```python
-# 伪代码
-for region in regions:
-    for nc_file in nc_files:
-        for var in vars:
-            weights = compute_overlap_weights(region.geometry, nc_grid)
-            value = np.nansum(data[var] * weights) / np.nansum(weights)
-            db.insert(region_id, granularity, year, month, var, value)
+class RegionAggregator(ABC):
+    def prepare(self, region_geom, grid_lats: list, grid_lons: list) -> None:
+        """每个区域调用一次，缓存权重/掩码，避免逐帧重复计算。"""
+        ...
+
+    @abstractmethod
+    def aggregate(self, frame_2d: np.ndarray, var_unit: str) -> float:
+        """将单帧二维格点数组聚合为标量。frame_2d shape: (lat, lon)。"""
+        ...
 ```
 
-### SQLite 数据库设计
+**`AreaWeightedMean`（`--method area_weighted`，默认）**
 
-数据库文件路径：`/static/db/stats.db`
+用 geopandas/shapely 计算每个格点单元与区域多边形的面积重叠比例作为权重，对所有 var 做加权平均：
+
+```python
+weights = compute_overlap_weights(region_geom, grid_lats, grid_lons)  # shape (lat, lon)
+value = np.nansum(frame_2d * weights) / np.nansum(weights[~np.isnan(frame_2d)])
+```
+
+**`PointInBoundary`（`--method point_in_boundary`）**
+
+仅取中心点落在区域多边形内的格点，按 var 单位分派聚合算子：
+
+```python
+mask = points_in_polygon(region_geom, grid_lats, grid_lons)  # bool (lat, lon)
+vals = frame_2d[mask & ~np.isnan(frame_2d)]
+value = np.sum(vals) if var_unit == 'kg' else np.mean(vals)
+```
+
+**var 单位与聚合算子对应关系**（`PointInBoundary` 使用）：
+
+| 单位 | 算子 | 对应 var |
+|------|------|---------|
+| `kg` | SUM | SP, aveMv, aveMh, INv, OTv, INh, OTh, MC, GMh, GMv, CWR |
+| `%` | MEAN | CEv, PEh |
+| `day` / `hour` | MEAN | RCv, RCh |
+
+---
+
+### SQLite 数据库设计（宽表）
+
+数据库文件路径：`db/stats.db`（生成后加入 `.gitignore`，不入版本库）
 
 ```sql
 CREATE TABLE region_stats (
     region_id   TEXT    NOT NULL,
     granularity TEXT    NOT NULL CHECK (granularity IN ('year', 'month')),
     year        INTEGER NOT NULL,
-    month       INTEGER,
-    var         TEXT    NOT NULL,
-    value       REAL,
-    PRIMARY KEY (region_id, granularity, year, month, var)
-);
-
-CREATE TABLE regions (
-    region_id   TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    name_en     TEXT,
-    geojson     TEXT NOT NULL
+    month       INTEGER,          -- NULL when granularity='year'
+    SP          REAL,
+    aveMv       REAL,
+    aveMh       REAL,
+    INv         REAL,
+    OTv         REAL,
+    INh         REAL,
+    OTh         REAL,
+    MC          REAL,
+    GMh         REAL,
+    GMv         REAL,
+    CWR         REAL,
+    CEv         REAL,
+    PEh         REAL,
+    RCv         REAL,
+    RCh         REAL,
+    PRIMARY KEY (region_id, granularity, year, month)
 );
 
 CREATE INDEX idx_region_gran ON region_stats (region_id, granularity, year, month);
 ```
 
-### 执行参数设计
+### 后端时间聚合 SQL 示例
+
+后端直接对宽表做 SQL 聚合，无需预存派生数据：
+
+```sql
+-- mean_all：全期年均
+SELECT AVG(SP) AS SP, AVG(CWR) AS CWR, ...
+FROM region_stats
+WHERE region_id = ? AND granularity = 'year'
+  AND year BETWEEN ? AND ?;
+
+-- mean_month：多年月气候态（按月号分组）
+SELECT month, AVG(SP) AS SP, AVG(CWR) AS CWR, ...
+FROM region_stats
+WHERE region_id = ? AND granularity = 'month'
+  AND year BETWEEN ? AND ?
+GROUP BY month ORDER BY month;
+
+-- mean_season：季节气候态
+SELECT
+  CASE
+    WHEN month IN (3,4,5) THEN 'spring'
+    WHEN month IN (6,7,8) THEN 'summer'
+    WHEN month IN (9,10,11) THEN 'autumn'
+    ELSE 'winter'
+  END AS season,
+  AVG(SP) AS SP, AVG(CWR) AS CWR, ...
+FROM region_stats
+WHERE region_id = ? AND granularity = 'month'
+  AND year BETWEEN ? AND ?
+GROUP BY season;
+```
+
+### 执行参数
 
 ```bash
+# 默认方法（area_weighted）
 uv run python scripts/netcdf_to_sqlite.py \
   --nc-dir data/nc \
   --shape-dir data/shapes \
-  --db-path /data/static/db/stats.db
+  --db-path db/stats.db
+
+# 切换方法
+uv run python scripts/netcdf_to_sqlite.py \
+  --nc-dir data/nc \
+  --shape-dir data/shapes \
+  --db-path db/stats_pointin.db \
+  --method point_in_boundary
 ```
 
 ### 性能估算
 
-- 总记录数：约 2 万行（8 区域 × 328 时间步 × 15 var）
-- 预计总耗时：< 10 分钟
-- 数据库文件体积：< 5MB
+- 总行数：2,704 行（8 区域 × 338 时间步）
+- 预计总耗时：< 10 分钟（`prepare()` 每区域调用一次，权重缓存后逐帧复用）
+- 数据库文件体积：< 1MB
 
 ---
 
 ## 色卡配置
 
-var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json 中，由前端 `frontend/src/config/vars.js` 单独维护，与数据预生成流程解耦。
+var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json 中，由前端 `frontend/src/config/vars.ts` 单独维护，与数据预生成流程解耦。
+
+---
+
+## 项目构建脚本（`Makefile`）
+
+项目根目录的 `Makefile` 统一管理数据生成、前端构建与打包全流程。
+
+### 主要 target
+
+| Target | 功能 |
+|--------|------|
+| `make data-sqlite` | 运行 `netcdf_to_sqlite.py`（可通过 `METHOD=point_in_boundary` 覆盖默认方法） |
+| `make data-grid` | 运行 `netcdf_to_json.py`，生成格点 JSON |
+| `make shapes` | 将 `data/shapes/` 中文文件名按 region_id 重命名复制到 `static/shapes/` |
+| `make frontend` | `pnpm build`，产物输出至 `static/web/` |
+| `make package` | 组装分发目录 + 打 `.tar.gz` 压缩包（含 `bin/`、`app/`、`static/`、`db/`、`conf/`） |
+| `make dev` | 同时启动 FastAPI dev server（8000）和 Vite dev server（5173） |
+| `make clean` | 删除全部生成文件（`static/grid/`、`static/shapes/`、`static/web/`、`db/`、`dist/`） |
+
+所有生成产物（`static/grid/`、`static/shapes/`、`static/web/`、`static/reports/`、`db/`、`dist/`）均在 `.gitignore` 中排除，不入版本库。
 
 ---
 
 ## 预生成执行顺序
 
 ```
-1. shape 文件已就绪（data/shapes/，GCJ-02）
-2. uv run python scripts/netcdf_to_sqlite.py（生成区域统计数据库）
-3. uv run python scripts/netcdf_to_json.py（生成格点 JSON 及 meta.json）
-4. 将 .docx 报告文件按命名规则放入 /static/reports/
+1. shape 文件已就绪（data/shapes/，直接使用，视为 WGS-84）
+2. make data-sqlite    （生成区域统计 SQLite，需要 netcdf 原始数据）
+3. make data-grid      （生成格点 JSON 及 meta.json，需要 netcdf 原始数据）
+4. 将 .docx 报告文件按命名规则放入 static/reports/
+5. make frontend       （编译前端，需要 Node.js 环境就绪）
+6. make package        （制作分发压缩包）
 ```

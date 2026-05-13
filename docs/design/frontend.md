@@ -478,47 +478,45 @@ Worker：
 
 ### 数据加载策略
 
-切换到区域统计模块、或切换区域时，并行请求当前 var 的逐年和逐月全量数据：
+切换区域、切换聚合模式时，按需请求对应 granularity 的数据（单次请求返回全部 15 个 var）：
 
 ```
-GET /api/v1/stats?region_id={id}&granularity=year&year_start=2000&year_end=2025&var={v}
-GET /api/v1/stats?region_id={id}&granularity=month&year_start=2000&year_end=2025&var={v}
+GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=2025
 ```
 
-结果缓存到 `stores/region.ts` 的 `statsCache`（key：`{region_id}_{var}`）。
+结果缓存到 `stores/region.ts` 的 `statsCache`（key：`{region_id}_{granularity}`）。命中缓存则跳过请求。
 
-**统计模式的客户端计算**（从缓存数据派生，无额外请求）：
+所有时间聚合（年平均、月平均、季平均）均由后端 SQL 完成，前端无客户端计算逻辑：
 
-| 聚合模式 | 计算方式 |
-|---------|---------|
-| 逐年 | 直接取 `granularity=year` 数据，26 个时间点 |
-| 逐月 | 直接取 `granularity=month` 数据，312 个时间点 |
-| 年平均 | 对 year 数据求算术均值 → 1 个标量 |
-| 月平均 | 按月号（1–12）分组 month 数据，各组求均值 → 12 个数值 |
-| 季平均 | 按季节分组 month 数据（春MAM/夏JJA/秋SON/冬DJF），各组均值 → 4 个数值 |
+| 聚合模式 | granularity 参数 | 后端处理 | 帧数 |
+|---------|----------------|---------|------|
+| 逐年 | `year` | `SELECT WHERE` | 26 |
+| 逐月 | `month` | `SELECT WHERE` | 312 |
+| 年平均 | `mean_all` | `AVG(...)` | 1 |
+| 月平均 | `mean_month` | `AVG(...) GROUP BY month` | 12 |
+| 季平均 | `mean_season` | `AVG(...) GROUP BY season` | 4 |
 
 ### HistoryModal（区域统计）
 
-点击 [查看历史] 打开 880×560 模态框，从后端获取完整历史数据，支持多变量叠加展示。
+点击 [查看历史] 打开 880×560 模态框，支持多变量叠加展示。
 
-**数据来源**：后端 `/api/v1/stats` 接口（SQLite region_stats 表）
+**数据来源**：后端 `/api/v1/stats` 接口，statsCache 命中则直接复用。
 
 **图表（ECharts 折线图）**：
-- 默认加载当前选中 var 的数据（若 statsCache 中已有则复用）
-- **追加变量**：图表内提供"+ 添加变量"按钮 → 搜索并选择其他 var → 发起请求 → 追加折线至同一图表
-- 多变量共享横轴；纵轴策略：同单位则共用一条 Y 轴，不同单位则增加右侧 Y 轴
-- 多变量配色：独立 palette，与格点 colormap 无关（设计稿风格：首色 `--accent`，次色使用与之对比的暖/冷色序列）
-- 当前帧：橙色竖线高亮（同格点数据模块）
-- 点击图表某帧 → 关闭 Modal 并跳转主视图到该帧
+- 默认加载当前聚合模式下当前选中 var 的折线
+- **追加变量**：图表内"+ 添加变量"按钮 → 选择 var → 复用 statsCache 中对应数据（已缓存则无需请求）→ 追加折线
+- 多变量共享横轴；同单位共用一条 Y 轴，不同单位增加右侧 Y 轴
+- 多变量配色：独立 palette，首色 `--accent`，次色暖/冷交替序列
+- 当前帧：橙色竖线高亮；点击图表某帧 → 关闭 Modal 并跳转主视图到该帧
 
 **Modal 内 Tab**：
 
-| Tab | 数据 | 帧数 | 数据来源 |
-|-----|------|------|---------|
-| 逐月 | month granularity 全量 | 312 | statsCache 或后端请求 |
-| 逐年 | year granularity 全量 | 26 | statsCache 或后端请求 |
-| 月平均 | 月号分组均值 | 12 | 客户端计算 |
-| 季平均 | 季节分组均值 | 4 | 客户端计算 |
+| Tab | granularity | 帧数 | 数据来源 |
+|-----|------------|------|---------|
+| 逐月 | `month` | 312 | statsCache 或后端请求 |
+| 逐年 | `year` | 26 | statsCache 或后端请求 |
+| 月平均 | `mean_month` | 12 | statsCache 或后端请求 |
+| 季平均 | `mean_season` | 4 | statsCache 或后端请求 |
 
 ---
 
@@ -657,15 +655,22 @@ interface VarState {
 }
 
 // stores/region.ts — 区域状态（仅区域统计模块使用）
+// 每行包含时间字段（year/month/season）+ 全部 15 个 var 的数值
+type StatsRow = {
+  year?:   number;
+  month?:  number;
+  season?: string;
+} & Record<string, number | null>;
+
 interface RegionStatsData {
-  year:  Array<{ year: number; month: null; value: number }>;
-  month: Array<{ year: number; month: number; value: number }>;
+  granularity: AggMode;
+  rows:        StatsRow[];
 }
 
 interface RegionState {
   selRegionId: string;                          // e.g. 'xizang' | 'lasa'
   regions:     RegionMeta[];                    // 从 /api/v1/meta/regions 加载
-  statsCache:  Map<string, RegionStatsData>;    // key: '{regionId}_{varName}'
+  statsCache:  Map<string, RegionStatsData>;    // key: '{regionId}_{granularity}'
 }
 
 // stores/meta.ts — 格点元数据（启动时加载一次）

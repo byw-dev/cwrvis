@@ -77,19 +77,21 @@ MapLibre ImageSource 更新 → 渲染到地图
 ### 区域统计数据流
 
 ```
-进入区域统计模块，或切换区域/var
-    │
-    ├─ GET /api/v1/stats?region_id=X&granularity=year&year_start=2000&year_end=2025&var=CWR
-    └─ GET /api/v1/stats?region_id=X&granularity=month&year_start=2000&year_end=2025&var=CWR
-    │  （两个请求并行）
-    ▼
-前端缓存 year + month 原始数据到 Pinia store
-    │
-    ├─ 聚合模式=逐年/逐月：直接取缓存数据渲染地图色块 + Inspector
-    └─ 聚合模式=年平均/月平均/季平均：客户端从缓存计算均值
+进入区域统计模块，或切换区域/聚合模式
     │
     ▼
-[查看历史] → ECharts 折线图（支持追加多变量叠加对比）
+GET /api/v1/stats?region_id=X&granularity={mode}&year_start=2000&year_end=2025
+    │  （单请求，返回全部 15 个 var；statsCache 命中则跳过）
+    ▼
+后端按 granularity 执行对应 SQL（SELECT / AVG+GROUP BY month / AVG+GROUP BY season）
+    │
+    ▼
+前端缓存响应到 Pinia statsCache（key: {region_id}_{granularity}）
+    │
+    ▼
+渲染 Inspector 面板（当前帧统计数值）+ 悬停 tooltip
+    │
+[查看历史] → HistoryModal → ECharts 折线图（4 个 Tab，支持追加多变量叠加对比）
 ```
 
 ### 报告下载数据流

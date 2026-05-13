@@ -30,16 +30,36 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - `meta.json`：网格坐标、`dxy`（m²，用于 kg→mm 换算）、时间轴、var 元数据
   - 输出：`static/grid/`（已 `.gitignore`，需在目标机器运行）
 
-- [ ] `BLOCKED` **S-02** `[M]` netcdf_to_sqlite.py：生成区域统计 SQLite
-  - 对每个 region × granularity（year/month）× var 计算区域均值，写入 `region_stats` 表
-  - SQLite 主键：`(region_id, granularity, year, month, var)`
-  - 输出：`db/stats.db`
-  - **阻塞原因**：等待甲方提供 netcdf 原始数据；等待确认区域 shape 坐标系
+- [ ] `BLOCKED` **S-02** `[L]` netcdf_to_sqlite.py：生成区域统计 SQLite
+  - **空间聚合 Strategy Pattern**（见 DEC-015、data-pipeline.md）：
+    - `RegionAggregator` ABC：`prepare(region_geom, lats, lons)` + `aggregate(frame_2d, var_unit)`
+    - `AreaWeightedMean`：geopandas 面积重叠权重，加权平均（默认，`--method area_weighted`）
+    - `PointInBoundary`：中心点在边界内的格点；单位 `kg` → SUM，其余 → 算术平均（`--method point_in_boundary`）
+    - `prepare()` 每区域调用一次，缓存权重/掩码，逐帧复用
+  - **SQLite 宽表**（见 DEC-014）：
+    - schema：`(region_id, granularity, year, month, SP, aveMv, ..., RCh)` — 15 var 为列
+    - 仅存 `granularity IN ('year', 'month')` 原始值；派生聚合通过 SQL 在查询时计算
+    - 主键：`(region_id, granularity, year, month)`
+  - CLI 参数：`--nc-dir`、`--shape-dir`、`--db-path`、`--method`（默认 `area_weighted`）
+  - 输出：`db/stats.db`（已加入 `.gitignore`）
+  - **阻塞原因**：等待甲方提供 netcdf 原始数据
 
 - [ ] `TODO` **S-03** `[S]` shapes 处理：中文文件名 → region_id 命名
   - `data/shapes/西藏自治区.geojson` → `static/shapes/xizang.geojson`（及其余 7 个地市）
   - region_id 映射见 `backend/config.py` 的 `REGION_MAP`
-  - 实现为 shell 脚本或 Makefile 规则，集成到打包流程（D-01 依赖此项）
+  - 实现为 Makefile `shapes` target，集成到打包流程（D-01 依赖此项）
+
+- [ ] `TODO` **S-04** `[M]` 根目录 Makefile（项目全流程构建脚本）
+  - Targets（见 data-pipeline.md "项目构建脚本"节）：
+    - `data-sqlite`：运行 S-02 脚本（支持 `METHOD=` 变量覆盖，默认 `area_weighted`）
+    - `data-grid`：运行 S-01 脚本
+    - `shapes`：执行 S-03 重命名逻辑
+    - `frontend`：`nvm use && pnpm build`，产物 → `static/web/`
+    - `package`：组装分发目录结构 + 打 `.tar.gz` 压缩包
+    - `dev`：并发启动 FastAPI（8000）和 Vite dev server（5173）
+    - `clean`：删除全部生成产物
+  - `.PHONY` 声明所有非文件 target
+  - 确保 `uv`、`nvm`、`pnpm` 的调用方式符合项目约束（uv run / corepack）
 
 ---
 
@@ -53,10 +73,11 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 开发阶段 CORS 配置（允许 localhost:5173）
   - `backend/config.py`：`REGION_MAP` 定义（8 个区域的 id→中文名映射）
 
-- [ ] `TODO` **B-02** `[S]` `/api/v1/stats` 接口（`routers/stats.py`）
-  - 参数：`region_id`、`granularity`（year/month）、`year_start`、`year_end`（2000–2025）、`var`（可重复）
-  - SQLite 查询，结果按 `{ vars: { [var]: [{year, month, value}] } }` 结构返回
-  - 参数校验：region_id 不存在 → 404；参数非法 → 400
+- [ ] `TODO` **B-02** `[M]` `/api/v1/stats` 接口（`routers/stats.py`）
+  - 参数：`region_id`、`granularity`（5 种：`year`/`month`/`mean_all`/`mean_month`/`mean_season`）、`year_start`、`year_end`（2000–2025）；无 var 过滤参数，一次返回全部 15 个 var
+  - 按 granularity 路由到对应 SQL（原始 SELECT / `AVG+GROUP BY month` / `AVG+GROUP BY season`）；详见 `data-pipeline.md` SQL 示例
+  - 返回结构：`{ region_id, granularity, rows: [{year?, month?, season?, SP, CWR, ...}] }`
+  - 参数校验：region_id 不存在 → 404；granularity 非法 → 400；year 范围非法 → 400
   - `← needs: B-01`，需要 `stats.db`（若 S-02 未完成可用空数据库开发接口骨架）
 
 - [ ] `TODO` **B-03** `[S]` `/api/v1/report/download` 接口（`routers/report.py`）
@@ -196,16 +217,16 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - `← needs: F-08`
 
 - [ ] `TODO` **F-15** `[M]` RegionModule 容器 + 区域交互
-  - 进入模块时：加载当前 `selRegionId` + `selVar` 的 year & month 全量 stats 数据（两个并行请求）
-  - `selRegionId` 或 `selVar` 变化时：重新加载 stats 数据（先查 statsCache，命中则跳过请求）
+  - 进入模块或切换区域/聚合模式时：按需请求 `GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=2025`；先查 `statsCache`（key: `{regionId}_{granularity}`），命中则跳过请求
+  - 返回数据为全部 15 var 的宽表行，缓存后直接读取当前 selVar 对应列渲染 Inspector
   - 地图 click 事件：命中地市 → 更新 `selRegionId` → 联动 SubToolbar RegionPicker
-  - 地图 hover 事件：命中地市 → feature-state 悬停高亮 + HoverTooltip（地市名 + 当前统计数值）
+  - 地图 hover 事件：命中地市 → feature-state 悬停高亮 + HoverTooltip（地市名 + 当前帧统计数值，从已缓存数据读取）
   - 区域外点击：无响应
   - `← needs: F-06, F-14, F-03`
 
 - [ ] `TODO` **F-16** `[L]` HistoryModal（区域统计模式）
-  - **数据来源**：`/api/v1/stats`（后端 SQLite），statsCache 中有则复用
-  - 4 个 Tab：逐月（312帧）/ 逐年（26帧）/ 月平均（12帧，客户端计算）/ 季平均（4帧，客户端计算）
+  - **数据来源**：`/api/v1/stats`（后端 SQLite），statsCache 中有则复用；全部 4 个 Tab 均来自后端，无客户端计算
+  - 4 个 Tab：逐月（`month`，312帧）/ 逐年（`year`，26帧）/ 月平均（`mean_month`，12帧）/ 季平均（`mean_season`，4帧）
   - ECharts 折线图，**多变量叠加**：
     - 默认加载 `selVar` 数据
     - "+ 添加变量"按钮 → VarPicker → 发起请求 → 追加折线（不同颜色）
@@ -242,8 +263,8 @@ F-01 → F-02 → F-04 → F-05 → F-06
   - 目录：`cwrvis-{version}/bin/`、`app/`、`static/{grid,web,shapes,reports}/`、`db/`、`conf/`、`logs/`
   - `bin/start.sh`：检查 `.venv`，`source conf/config.env`，启动 uvicorn（2 workers）
   - `bin/stop.sh`：`pkill -f uvicorn`（或读 PID 文件 graceful stop）
-  - 打包脚本：① 前端 `pnpm build` → `static/web/`；② S-03 shapes 重命名 → `static/shapes/`；③ `uv pip install` 到 `app/.venv`
-  - `← needs: S-03, B-01~B-04, F-01~F-19`
+  - 打包通过根目录 `Makefile` 的 `make package` target 完成（见 S-04）
+  - `← needs: S-03, S-04, B-01~B-04, F-01~F-19`
 
 - [ ] `TODO` **D-02** `[S]` systemd service 配置
   - `deploy/systemd/cwrvis.service`：`WorkingDirectory`、`ExecStart`（绝对路径 `bin/start.sh`）、`Restart=on-failure`、`RestartSec=5`
@@ -261,10 +282,10 @@ F-01 → F-02 → F-04 → F-05 → F-06
 
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
-| S 脚本 | 3 | 1 | 0 | 1 | 1 |
+| S 脚本 | 4 | 1 | 0 | 2 | 1 |
 | B 后端 | 4 | 0 | 0 | 4 | 0 |
 | F 前端 | 19 | 5 | 0 | 14 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **29** | **6** | **0** | **22** | **1** |
+| **合计** | **30** | **6** | **0** | **23** | **1** |
 
 **预估剩余工时**（单人）：约 30–35 天（B+S 可与 F 并行，实际约 20–25 天）

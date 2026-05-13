@@ -83,3 +83,15 @@ data/nc/
 
 # 预生成输出（由脚本生成，不入库）
 output/
+
+# 离线脚本生成的静态资产
+static/grid/
+static/shapes/
+static/reports/
+static/web/
+
+# SQLite 数据库（离线脚本生成）
+db/
+
+# 分发压缩包
+dist/

@@ -167,22 +167,25 @@ cwrvis-{version}/
 
 ### SQLite 区域统计
 
-数据库文件：`/static/db/stats.db`
+数据库文件：`db/stats.db`（不入版本库，由脚本生成）
 
-主表结构：
+宽表结构（15 个 var 各占一列，仅存 `year` / `month` 两种原始粒度）：
 ```sql
 CREATE TABLE region_stats (
-    region_id   TEXT NOT NULL,
-    granularity TEXT NOT NULL,   -- 'year' | 'month'
+    region_id   TEXT    NOT NULL,
+    granularity TEXT    NOT NULL CHECK (granularity IN ('year', 'month')),
     year        INTEGER NOT NULL,
-    month       INTEGER,         -- NULL when granularity='year'
-    var         TEXT NOT NULL,
-    value       REAL,
-    PRIMARY KEY (region_id, granularity, year, month, var)
+    month       INTEGER,          -- NULL when granularity='year'
+    SP REAL, aveMv REAL, aveMh REAL, INv REAL, OTv REAL,
+    INh REAL, OTh REAL, MC REAL, GMh REAL, GMv REAL,
+    CWR REAL, CEv REAL, PEh REAL, RCv REAL, RCh REAL,
+    PRIMARY KEY (region_id, granularity, year, month)
 );
 ```
 
-预计行数约 2 万行，文件体积 < 5MB。
+预计行数 2,704 行（8 区域 × 338 时间步），文件体积 < 1MB。
+
+`mean_all` / `mean_month` / `mean_season` 三种聚合值通过后端 SQL `AVG + GROUP BY` 在查询时实时计算，不预存。
 
 ### 预生成报告
 
@@ -213,11 +216,11 @@ Base URL：`/api/v1`
 `/stats` 参数：
 ```
 region_id   string   必填
-granularity string   'year' | 'month'
+granularity string   'year' | 'month' | 'mean_all' | 'mean_month' | 'mean_season'
 year_start  int      必填
 year_end    int      必填
-var         string   必填，可多值（重复参数）
 ```
+返回全部 15 个 var，无需传 var 过滤参数。
 
 `/report/download` 参数：
 ```
