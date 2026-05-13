@@ -1,0 +1,302 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, shallowRef } from 'vue'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import { useRegionStore } from '@/stores/region'
+import { useTimeStore } from '@/stores/time'
+import { useVarStore } from '@/stores/var'
+import { VARS, VAR_GROUPS } from '@/config/vars'
+import { buildItems } from '@/stores/time'
+import type { VarName, AggMode } from '@/types'
+
+echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
+
+const emit = defineEmits<{ close: [] }>()
+
+const regionStore = useRegionStore()
+const timeStore   = useTimeStore()
+const varStore    = useVarStore()
+
+type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'
+const TABS: { key: TabKey; label: string; mode: AggMode }[] = [
+  { key: 'monthly',     label: '逐月',   mode: 'monthly'     },
+  { key: 'yearly',      label: '逐年',   mode: 'yearly'      },
+  { key: 'avg_monthly', label: '月平均', mode: 'avg_monthly' },
+  { key: 'avg_season',  label: '季平均', mode: 'avg_season'  },
+]
+
+const activeTab    = ref<TabKey>('yearly')
+const activeVars   = ref<VarName[]>([varStore.selVar])
+const varPickerOpen = ref(false)
+
+const chartEl = ref<HTMLDivElement>()
+const chart   = shallowRef<echarts.ECharts | null>(null)
+
+const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+
+async function ensureData(varName: VarName, mode: AggMode) {
+  await regionStore.loadStats(regionStore.selRegionId, mode)
+}
+
+async function loadActiveTab() {
+  const mode = TABS.find(t => t.key === activeTab.value)!.mode
+  for (const vn of activeVars.value) {
+    await ensureData(vn, mode)
+  }
+  updateChart()
+}
+
+async function addVar(vn: VarName) {
+  if (activeVars.value.includes(vn)) return
+  activeVars.value = [...activeVars.value, vn]
+  const mode = TABS.find(t => t.key === activeTab.value)!.mode
+  await ensureData(vn, mode)
+  varPickerOpen.value = false
+  updateChart()
+}
+
+function removeVar(vn: VarName) {
+  if (activeVars.value.length <= 1) return
+  activeVars.value = activeVars.value.filter(v => v !== vn)
+  updateChart()
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
+
+function buildLabels(mode: AggMode): string[] {
+  return buildItems(mode).map(it =>
+    it.year && it.month ? `${it.year}-${String(it.month).padStart(2,'0')}`
+    : it.year  ? String(it.year)
+    : it.month ? `${String(it.month).padStart(2,'0')}月`
+    : it.season ?? it.label
+  )
+}
+
+function currentMarkIdx(mode: AggMode): number | null {
+  const items = buildItems(mode)
+  const s = timeStore.sel
+  const idx = items.findIndex(it => {
+    if (mode === 'monthly')     return it.year === s.year && it.month === s.month
+    if (mode === 'yearly')      return it.year === s.year
+    if (mode === 'avg_monthly') return it.month === s.month
+    if (mode === 'avg_season')  return it.season === s.season
+    return false
+  })
+  return idx >= 0 ? idx : null
+}
+
+function updateChart() {
+  if (!chart.value) return
+  const tab  = TABS.find(t => t.key === activeTab.value)!
+  const mode = tab.mode
+  const labels = buildLabels(mode)
+  const markIdx = currentMarkIdx(mode)
+
+  const yAxes: echarts.EChartsOption['yAxis'] = []
+  const unitsSeen: string[] = []
+
+  const series = activeVars.value.map((vn, i) => {
+    const meta = VARS[vn]
+    let yAxisIdx = unitsSeen.indexOf(meta.units)
+    if (yAxisIdx === -1) {
+      unitsSeen.push(meta.units)
+      yAxisIdx = unitsSeen.length - 1
+    }
+    const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
+    const data = rows.map(r => {
+      const v = r[vn as string]
+      return typeof v === 'number' ? v : null
+    })
+
+    return {
+      type: 'line' as const,
+      name: vn,
+      data,
+      yAxisIndex: yAxisIdx,
+      lineStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length], width: 1.5 },
+      itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] },
+      symbol: 'none',
+      markLine: markIdx !== null && i === 0 ? {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { color: '#ffba49', width: 1.5 },
+        data: [{ xAxis: markIdx }],
+      } : undefined,
+    }
+  })
+
+  unitsSeen.forEach((unit, i) => {
+    yAxes.push({
+      type: 'value',
+      name: unit,
+      position: i === 0 ? 'left' : 'right',
+      axisLine: { show: false },
+      splitLine: i === 0 ? { lineStyle: { color: '#1f2a37' } } : { show: false },
+      axisLabel: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+    } as any)
+  })
+
+  chart.value.setOption({
+    backgroundColor: 'transparent',
+    legend: {
+      top: 4, right: 16,
+      textStyle: { color: '#b6c2d2', fontSize: 10 },
+      inactiveColor: '#3b4a5e',
+    },
+    grid: { top: 32, right: unitsSeen.length > 1 ? 60 : 20, bottom: 48, left: 60 },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(13,17,23,0.9)',
+      borderColor: '#2a3645',
+      textStyle: { color: '#b6c2d2', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+    },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { lineStyle: { color: '#1f2a37' } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#54606f', fontSize: 9,
+        interval: Math.floor(labels.length / 12),
+        fontFamily: 'JetBrains Mono, monospace',
+      },
+    },
+    yAxis: yAxes,
+    series,
+  }, true)
+}
+
+onMounted(async () => {
+  if (chartEl.value) {
+    chart.value = echarts.init(chartEl.value, null, { renderer: 'canvas' })
+    chart.value.on('click', (params: any) => {
+      const mode = TABS.find(t => t.key === activeTab.value)!.mode
+      timeStore.goToIndex(params.dataIndex)
+      const items = buildItems(mode)
+      if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
+    })
+    await loadActiveTab()
+  }
+})
+
+watch(activeTab, loadActiveTab)
+watch(() => timeStore.currentIndex, updateChart)
+</script>
+
+<template>
+  <div class="modal-backdrop" @click.self="emit('close')">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
+        <button class="modal-close" @click="emit('close')">✕</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button
+          v-for="t in TABS" :key="t.key"
+          class="tab-btn"
+          :class="{ active: activeTab === t.key }"
+          @click="activeTab = t.key"
+        >{{ t.label }}</button>
+
+        <!-- Active var chips + add -->
+        <div class="var-chips">
+          <span
+            v-for="vn in activeVars" :key="vn"
+            class="var-chip"
+            :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
+          >
+            {{ vn }}
+            <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
+          </span>
+
+          <div class="dropdown-wrap" style="position: relative">
+            <button class="add-var-btn" @click="varPickerOpen = !varPickerOpen">+ 添加变量</button>
+            <div v-if="varPickerOpen" class="var-picker">
+              <template v-for="g in VAR_GROUPS" :key="g.id">
+                <div class="picker-group">{{ g.label }}</div>
+                <button
+                  v-for="vn in g.vars" :key="vn"
+                  class="picker-item"
+                  :disabled="activeVars.includes(vn)"
+                  @click="addVar(vn)"
+                >{{ vn }} <span class="picker-name">{{ VARS[vn].long_name }}</span></button>
+              </template>
+            </div>
+            <div v-if="varPickerOpen" class="picker-backdrop" @click="varPickerOpen = false" />
+          </div>
+        </div>
+      </div>
+
+      <div ref="chartEl" class="chart-area" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(7,9,12,0.7);
+  backdrop-filter: blur(3px);
+  z-index: 1200;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: var(--bg-1);
+  border: 1px solid var(--line-3);
+  width: 880px; max-width: calc(100vw - 32px);
+  display: flex; flex-direction: column;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
+}
+.modal-title { font-family: var(--font-mono); font-size: 12px; color: var(--fg-1); }
+.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+.modal-close:hover { color: var(--fg-0); }
+
+.modal-tabs {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--line-1);
+}
+.tab-btn {
+  height: 36px; padding: 0 16px;
+  background: none; border: none; border-right: 1px solid var(--line-1);
+  color: var(--fg-3); font-size: 12px; cursor: pointer;
+}
+.tab-btn:hover { background: var(--bg-3); color: var(--fg-1); }
+.tab-btn.active { color: var(--accent); background: var(--accent-faint); }
+
+.var-chips { display: flex; align-items: center; gap: 4px; padding: 0 12px; flex: 1; flex-wrap: wrap; }
+.var-chip {
+  display: flex; align-items: center; gap: 2px;
+  padding: 2px 6px; border: 1px solid; font-family: var(--font-mono); font-size: 10px; color: var(--fg-1);
+}
+.chip-rm { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.add-var-btn {
+  height: 22px; padding: 0 8px; background: var(--bg-2); border: 1px solid var(--line-2);
+  color: var(--fg-2); font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.add-var-btn:hover { background: var(--bg-3); color: var(--fg-0); }
+
+.var-picker {
+  position: absolute; top: calc(100% + 4px); left: 0;
+  z-index: 1300; background: var(--bg-1); border: 1px solid var(--line-3);
+  width: 200px; max-height: 280px; overflow-y: auto; padding: 4px 0;
+}
+.picker-backdrop { position: fixed; inset: 0; z-index: 1299; }
+.picker-group { padding: 5px 10px 2px; font-size: 9px; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }
+.picker-item {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 10px;
+  background: none; border: none; color: var(--fg-1); font-size: 11px; cursor: pointer; text-align: left;
+}
+.picker-item:hover:not(:disabled) { background: var(--bg-3); }
+.picker-item:disabled { opacity: 0.4; cursor: default; }
+.picker-name { color: var(--fg-3); font-size: 10px; }
+
+.chart-area { width: 100%; height: 420px; }
+</style>
