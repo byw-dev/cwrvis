@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useMap } from '@/composables/useMap'
 import { useGridLayer } from '@/composables/useGridLayer'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
-import { useMetaStore } from '@/stores/meta'
 import HoverTooltip from '@/components/map/HoverTooltip.vue'
 import PinTip from '@/components/map/PinTip.vue'
+import Legend from '@/components/panels/Legend.vue'
+import Inspector from '@/components/panels/Inspector.vue'
+import HistoryModal from '@/components/modals/HistoryModal.vue'
+import { isInGridBounds } from '@/utils/grid'
 import type { LngLat } from 'maplibre-gl'
+import type { AggMode, VarName } from '@/types'
 
-const { map }   = useMap()
+const { map }                           = useMap()
+const { getValueAt, fetchFrames }       = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
-const metaStore = useMetaStore()
-
-// Activate grid rendering
-useGridLayer()
 
 // ── Hover state ───────────────────────────────────────────────────────────────
 
@@ -24,53 +25,30 @@ const hover = ref<{ x: number; y: number; value: number | null } | null>(null)
 // ── Picked point state ────────────────────────────────────────────────────────
 
 interface Picked { lat: number; lon: number; x: number; y: number }
-const picked = ref<Picked | null>(null)
+const picked    = ref<Picked | null>(null)
 const pickedValue = ref<number | null>(null)
 const showHistory = ref(false)
-
-// ── Interpolation helpers ─────────────────────────────────────────────────────
-
-function bilinear(lat: number, lon: number): number | null {
-  const grid = metaStore.grid
-  if (!grid) return null
-
-  const lats = grid.lat
-  const lons = grid.lon
-
-  // Find surrounding indices
-  const latI = lats.findIndex(l => l <= lat)
-  const lonI = lons.findIndex(l => l >= lon)
-  if (latI <= 0 || lonI <= 0) return null
-
-  const y0 = latI - 1, y1 = latI
-  const x0 = lonI - 1, x1 = lonI
-  const ty = (lat - lats[y0]!) / (lats[y1]! - lats[y0]!)
-  const tx = (lon - lons[x0]!) / (lons[x1]! - lons[x0]!)
-
-  const idx = timeStore.currentIndex
-  const varName = varStore.selVar
-
-  // Get current frame from JSON cache (exposed via metaStore or direct import)
-  // For now use metaStore's access if available; else null
-  // (frame data lives in useGridLayer's jsonCache, not easily accessible here)
-  // Real interpolation is done in the Worker; for hover display we do a quick approximation
-  void idx; void varName  // suppress unused warnings for now
-  void ty; void tx; void x0; void x1; void y0; void y1
-
-  return null  // TODO: expose jsonCache from useGridLayer for hover interpolation
-}
+const gridData  = ref<Record<string, (number | null)[][][]>>({})
 
 // ── Map event handlers ────────────────────────────────────────────────────────
 
 function onMouseMove(e: MouseEvent) {
-  hover.value = { x: e.clientX, y: e.clientY, value: null }
-  // Update picked point screen position if exists
+  const m = map.value
+  if (!m) return
+
+  const rect   = m.getContainer().getBoundingClientRect()
+  const lngLat = m.unproject([e.clientX - rect.left, e.clientY - rect.top])
+
+  if (!isInGridBounds(lngLat.lat, lngLat.lng)) {
+    hover.value = null
+    return
+  }
+
+  hover.value = { x: e.clientX, y: e.clientY, value: getValueAt(lngLat.lat, lngLat.lng) }
+
   if (picked.value) {
-    const m = map.value
-    if (m) {
-      const pt = m.project([picked.value.lon, picked.value.lat] as [number, number])
-      picked.value = { ...picked.value, x: pt.x, y: pt.y }
-    }
+    const pt = m.project([picked.value.lon, picked.value.lat] as [number, number])
+    picked.value = { ...picked.value, x: pt.x, y: pt.y }
   }
 }
 
@@ -79,13 +57,12 @@ function onMouseLeave() {
 }
 
 function onMapClick(e: { lngLat: LngLat; point: { x: number; y: number } }) {
-  picked.value = {
-    lat: e.lngLat.lat,
-    lon: e.lngLat.lng,
-    x: e.point.x,
-    y: e.point.y,
+  if (!isInGridBounds(e.lngLat.lat, e.lngLat.lng)) {
+    clearPick()
+    return
   }
-  pickedValue.value = bilinear(e.lngLat.lat, e.lngLat.lng)
+  picked.value = { lat: e.lngLat.lat, lon: e.lngLat.lng, x: e.point.x, y: e.point.y }
+  pickedValue.value = getValueAt(e.lngLat.lat, e.lngLat.lng)
 }
 
 function clearPick() {
@@ -96,6 +73,25 @@ function clearPick() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') clearPick()
+}
+
+// ── History modal ─────────────────────────────────────────────────────────────
+
+const HISTORY_MODES: AggMode[] = ['monthly', 'yearly', 'avg_monthly', 'avg_season']
+const GRAN_PATH_MAP: Partial<Record<AggMode, string>> = {
+  monthly: 'month', yearly: 'year', avg_monthly: 'mean_month', avg_season: 'mean_season',
+}
+
+async function openHistory() {
+  showHistory.value = true
+  const varName = varStore.selVar as VarName
+  const results = await Promise.all(HISTORY_MODES.map(m => fetchFrames(varName, m)))
+  const data: Record<string, (number | null)[][][]> = {}
+  HISTORY_MODES.forEach((m, i) => {
+    const frames = results[i]
+    if (frames) data[GRAN_PATH_MAP[m]!] = frames
+  })
+  gridData.value = data
 }
 
 // ── Frame label ───────────────────────────────────────────────────────────────
@@ -115,21 +111,26 @@ const frameLabel = computed(() => {
 
 let mapContainer: HTMLElement | null = null
 
-onMounted(() => {
-  const m = map.value
-  if (!m) return
-  mapContainer = m.getContainer()
-  mapContainer.addEventListener('mousemove', onMouseMove)
-  mapContainer.addEventListener('mouseleave', onMouseLeave)
-  m.on('click', onMapClick)
-  window.addEventListener('keydown', onKeydown)
-})
+// 用 watch 替代 onMounted，消除 map 初始化与组件挂载的竞态
+watch(
+  () => map.value,
+  (m) => {
+    if (!m || mapContainer) return  // 已绑定则跳过
+    mapContainer = m.getContainer()
+    mapContainer.addEventListener('mousemove', onMouseMove)
+    mapContainer.addEventListener('mouseleave', onMouseLeave)
+    m.on('click', onMapClick)
+    window.addEventListener('keydown', onKeydown)
+  },
+  { immediate: true },
+)
 
 onUnmounted(() => {
   const m = map.value
   if (mapContainer) {
     mapContainer.removeEventListener('mousemove', onMouseMove)
     mapContainer.removeEventListener('mouseleave', onMouseLeave)
+    mapContainer = null
   }
   m?.off('click', onMapClick)
   window.removeEventListener('keydown', onKeydown)
@@ -156,35 +157,47 @@ onUnmounted(() => {
     :frame-label="frameLabel"
     :var-name="varStore.selVar"
     @clear="clearPick"
-    @history="showHistory = true"
+    @history="openHistory"
   />
 
-  <!-- F-13: HistoryModal placeholder -->
-  <div v-if="showHistory" class="history-backdrop" @click="showHistory = false">
-    <div class="history-stub" @click.stop>
-      <p style="color: var(--fg-1); font-family: var(--font-mono);">历史数据图表（F-13，待实现）</p>
-      <button style="color: var(--accent); background: none; border: none; cursor: pointer;" @click="showHistory = false">关闭</button>
-    </div>
+  <!-- 右侧面板：图例 + 检查器 -->
+  <div class="right-panel">
+    <Inspector
+      v-if="picked"
+      mode="grid"
+      :lat="picked.lat"
+      :lon="picked.lon"
+      :frame-label="frameLabel"
+      :var-name="varStore.selVar"
+      :value="pickedValue"
+      :unit="varStore.varMeta.units"
+      @clear="clearPick"
+      @history="openHistory"
+    />
+    <Legend />
   </div>
+
+  <HistoryModal
+    v-if="showHistory"
+    mode="grid"
+    :lat="picked?.lat"
+    :lon="picked?.lon"
+    :var-name="varStore.selVar as VarName"
+    :grid-data="gridData"
+    @close="showHistory = false"
+  />
 </template>
 
 <style scoped>
-.history-backdrop {
+.right-panel {
   position: fixed;
-  inset: 0;
-  background: rgba(7,9,12,0.6);
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.history-stub {
-  background: var(--bg-1);
-  border: 1px solid var(--line-3);
-  padding: 40px 60px;
+  right: 12px;
+  bottom: 52px;   /* BottomBar 高度上方 */
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  gap: 6px;
+  pointer-events: auto;
 }
+
 </style>

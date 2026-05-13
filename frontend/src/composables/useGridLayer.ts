@@ -6,6 +6,7 @@ import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
 import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
+import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
 import type { AggMode } from '@/types'
 
@@ -213,7 +214,19 @@ export function useGridLayer() {
     },
   )
 
+  // 获取当前帧在 (lat, lon) 处的插值，供 hover/click 使用
+  function getValueAt(lat: number, lon: number): number | null {
+    const data = jsonCache.get(cacheKey(varStore.selVar, timeStore.mode))
+    const frame = data?.[timeStore.currentIndex]
+    return frame ? bilinearInterp(frame, lat, lon) : null
+  }
+
+  // 按需加载指定 var + mode 的帧数据，供 HistoryModal 使用
+  async function fetchFrames(varName: string, mode: AggMode): Promise<(number | null)[][][] | null> {
+    return loadJson(varName, mode)
+  }
+
   onUnmounted(() => { worker.terminate() })
 
-  return { renderCurrent }
+  return { renderCurrent, getValueAt, fetchFrames }
 }
