@@ -14,7 +14,7 @@
 3. 提供元数据接口（区域列表）
 4. 通过 `StaticFiles` 挂载托管格点 JSON、前端页面等静态资产
 
-格点 JSON（`/grid/**`）、前端页面（`/`）均由 FastAPI `StaticFiles` 直接服务，不经过应用逻辑。`db/stats.db` 不挂载为静态路由，仅在代码内部访问。
+格点 JSON（`/grid/**`）、区域 GeoJSON（`/shapes/**`）、前端页面（`/`）均由 FastAPI `StaticFiles` 直接服务，不经过应用逻辑。`db/stats.db` 不挂载为静态路由，仅在代码内部访问。
 
 ---
 
@@ -22,13 +22,13 @@
 
 ```
 backend/
-├── main.py              # FastAPI 应用入口，挂载路由与 StaticFiles
-├── config.py            # 配置（读取环境变量）
+├── main.py              # FastAPI 应用入口，挂载路由与 StaticFiles（含 /shapes/）
+├── config.py            # 配置（读取环境变量）+ REGION_MAP 定义
 ├── database.py          # SQLite 连接管理
 ├── routers/
 │   ├── stats.py         # /api/v1/stats
-│   ├── report.py        # /api/v1/report
-│   └── meta.py          # /api/v1/meta/regions
+│   ├── report.py        # /api/v1/report/download
+│   └── meta.py          # /api/v1/meta/regions（硬编码区域列表）
 ├── schemas.py           # Pydantic 响应模型
 └── pyproject.toml       # 依赖声明（uv 管理）
 ```
@@ -134,10 +134,10 @@ ORDER BY year, month, var;
 
 **参数校验**：
 - `granularity` 必须为 `year` 或 `month`
-- `year_start` 和 `year_end` 在 [2000, 2024] 范围内
+- `year_start` 和 `year_end` 在 [2000, 2025] 范围内
 - `year_end >= year_start`
 - `var` 列表不得为空，且每个值必须在已知 var 列表中
-- `region_id` 必须存在于 regions 表
+- `region_id` 必须在 `REGION_IDS`（见 config.py）中
 
 ---
 
@@ -175,29 +175,53 @@ filepath = REPORT_DIR / filename
 
 ### GET `/api/v1/meta/regions`
 
-返回所有预设区域的元数据，包含 GeoJSON 几何用于前端渲染。
+返回所有预设区域的元数据列表（不含 GeoJSON 几何体；几何数据通过 `/shapes/**` 静态路径单独加载）。
 
 **响应**：
 ```json
 {
   "ok": true,
   "data": [
-    {
-      "region_id": "region_a",
-      "name": "华北地区",
-      "name_en": "North China",
-      "geojson": {
-        "type": "Feature",
-        "geometry": { ... },
-        "properties": { "region_id": "region_a", "name": "华北地区" }
-      }
-    },
-    ...
+    { "region_id": "xizang",  "name": "西藏自治区", "level": "province" },
+    { "region_id": "lasa",    "name": "拉萨市",     "level": "prefecture" },
+    { "region_id": "rikaze",  "name": "日喀则市",   "level": "prefecture" },
+    { "region_id": "shannan", "name": "山南市",     "level": "prefecture" },
+    { "region_id": "linzhi",  "name": "林芝市",     "level": "prefecture" },
+    { "region_id": "changdu", "name": "昌都市",     "level": "prefecture" },
+    { "region_id": "naqu",    "name": "那曲市",     "level": "prefecture" },
+    { "region_id": "ali",     "name": "阿里地区",   "level": "prefecture" }
   ]
 }
 ```
 
-实现：查询 SQLite `regions` 表，解析 geojson 字段返回。
+实现：从 `config.py` 中硬编码的 `REGION_IDS` 列表（dict）直接返回，无需查询数据库。
+
+### 区域 GeoJSON 静态文件
+
+区域几何数据以静态文件形式提供，由 FastAPI `StaticFiles` 挂载在 `/shapes/` 路径：
+
+```
+/shapes/xizang.geojson   → data/shapes/西藏自治区.geojson（部署时按 region_id 重命名）
+/shapes/lasa.geojson     → data/shapes/拉萨市.geojson
+...（其余地市同理）
+```
+
+**region_id 到文件名的映射**（定义在 `backend/config.py`）：
+
+```python
+REGION_MAP: dict[str, str] = {
+    "xizang":  "西藏自治区",
+    "lasa":    "拉萨市",
+    "rikaze":  "日喀则市",
+    "shannan": "山南市",
+    "linzhi":  "林芝市",
+    "changdu": "昌都市",
+    "naqu":    "那曲市",
+    "ali":     "阿里地区",
+}
+```
+
+部署时，`bin/start.sh` 或预处理步骤将 `data/shapes/` 中的 GeoJSON 文件按 region_id 重命名后复制到 `static/shapes/`。开发环境可通过软链或 Vite proxy 访问。
 
 ---
 
