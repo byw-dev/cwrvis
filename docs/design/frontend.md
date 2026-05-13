@@ -5,12 +5,35 @@
 
 ---
 
+## 开发环境约束（强制）
+
+| 工具 | 版本 | 管理方式 |
+|------|------|----------|
+| Node.js | v24.15.0（Krypton） | nvm，版本固化于项目根 `.nvmrc` |
+| pnpm | 最新稳定版 | corepack，版本固化于 `frontend/package.json` 的 `packageManager` 字段 |
+
+**使用方式**：
+```bash
+# 切换到项目指定 Node.js 版本
+nvm use
+
+# 首次启用 corepack（Node.js 内置，一次性操作）
+corepack enable
+
+# 之后正常使用 pnpm，corepack 自动匹配 package.json 中声明的版本
+pnpm install
+```
+
+**禁止**直接使用 `npm` 或全局安装的 `pnpm` 绕过 corepack。
+
+---
+
 ## 技术栈
 
 | 技术 | 版本要求 | 用途 |
 |------|----------|------|
 | Vue 3 | ≥ 3.4 | 前端框架（Composition API） |
-| Vite | ≥ 5.0 | 构建工具 |
+| Vite | ≥ 6.0 | 构建工具 |
 | MapLibre GL JS | ≥ 4.0 | 地图渲染引擎 |
 | ECharts | ≥ 5.5 | 区域统计图表 |
 | Pinia | ≥ 2.0 | 状态管理 |
@@ -101,8 +124,8 @@ MapLibre 使用 `type: 'raster'` source 加载。
 
 ```
 主线程
-  │── fetch /static/grid/{gran}/{var}/{year}[_{month}].json
-  │── 解析 JSON，提取 data 二维数组
+  │── fetch /grid/{gran}/{var}.json（整个 var 的全时间轴数据）
+  │── 解析 JSON，按帧索引提取当前帧的二维数组
   │── postMessage({ data, colorScale, thresholds, targetWidth, targetHeight }) → Worker
   │
   Worker (gridRenderer.worker.js)
@@ -211,17 +234,15 @@ const CACHE_MAX = 20  // LRU 最大缓存帧数
 `frontend/.env`：
 ```
 VITE_API_BASE=/api/v1
-VITE_GRID_BASE=/static/grid
-VITE_META_BASE=/static/meta
+VITE_GRID_BASE=/grid
+VITE_AMAP_KEY=你的高德Key
 ```
 
-`frontend/.env.development`（本地开发代理）：
+`frontend/.env.development`（本地开发，Vite 代理转发到本地 FastAPI）：
 ```
 VITE_API_BASE=http://localhost:8000/api/v1
-VITE_GRID_BASE=http://localhost:8000/static/grid
+VITE_GRID_BASE=http://localhost:8000/grid
 ```
-
-Vite 开发服务器配置代理，将 `/api` 和 `/static` 转发到本地 FastAPI。
 
 ---
 
@@ -229,12 +250,13 @@ Vite 开发服务器配置代理，将 `/api` 和 `/static` 转发到本地 Fast
 
 ```bash
 cd frontend
-npm install
-npm run build
-# 产物在 frontend/dist/
+nvm use           # 切换至 .nvmrc 指定的 Node.js 版本
+pnpm install
+pnpm build
+# 产物在 frontend/dist/，拷贝至分发包 static/web/
 ```
 
-构建产物由 Nginx 直接托管（见 deployment.md）。
+构建产物由 FastAPI StaticFiles 托管（见 deployment.md）。
 
 ---
 

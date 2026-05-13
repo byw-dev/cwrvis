@@ -302,6 +302,23 @@ source .venv/bin/activate && python scripts/...
 
 ---
 
+### 前端环境管理（强制约束）
+
+**Node.js 版本**：`v24.15.0`（Krypton），由项目根 `.nvmrc` 固化，通过 nvm 切换：
+```bash
+nvm use   # 自动读取 .nvmrc
+```
+
+**pnpm**：通过 corepack 管理，版本号固化于 `frontend/package.json` 的 `packageManager` 字段：
+```bash
+corepack enable   # 首次启用（一次性）
+pnpm install      # corepack 自动使用 package.json 中声明的版本
+```
+
+**禁止**在前端目录使用 `npm` 命令，**禁止**使用全局安装的 pnpm 绕过 corepack。
+
+---
+
 ### Agent 工作规范
 
 1. **每次会话开始**，必须阅读本文件（`CLAUDE.md`）和本次任务对应的 `docs/design/` 子文档
