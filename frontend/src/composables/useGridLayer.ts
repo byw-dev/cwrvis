@@ -1,12 +1,17 @@
-import { watch, shallowRef, onUnmounted } from 'vue'
+import { ref, watch, shallowRef, onUnmounted } from 'vue'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
+import { useMetaStore } from '@/stores/meta'
+import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
 import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
 import type { AggMode } from '@/types'
+
+// kg→mm 换算状态：模块级，Legend 与 HistoryModal 共享
+export const isKgToMm = ref(false)
 
 type FrameData = { imageData: ImageData }
 
@@ -76,6 +81,7 @@ export function useGridLayer() {
   const timeStore   = useTimeStore()
   const varStore    = useVarStore()
   const settings    = useSettingsStore()
+  const metaStore   = useMetaStore()
 
   const worker = new Worker(
     new URL('../workers/gridRenderer.worker.ts', import.meta.url),
@@ -130,13 +136,19 @@ export function useGridLayer() {
     const cmName = settings.getColormap(varName as any)
     const lut    = getLut(cmName)
 
-    // 逐帧从数据自动计算量程
+    const needConvert = isKgToMm.value && VARS[varName]?.units === 'kg'
+    const dxy = needConvert ? (metaStore.grid?.dxy ?? null) : null
+
+    // 逐帧从数据自动计算量程（mm 模式下用换算后的值推算）
     let dataMin = Infinity, dataMax = -Infinity
-    for (const row of frame2d) {
-      for (const v of row) {
+    for (let i = 0; i < frame2d.length; i++) {
+      for (let j = 0; j < (frame2d[i]?.length ?? 0); j++) {
+        const v = frame2d[i][j]
         if (v === null) continue
-        if (v < dataMin) dataMin = v
-        if (v > dataMax) dataMax = v
+        const d = dxy?.[i]?.[j]
+        const eff = (needConvert && d && d > 0) ? v / d : v
+        if (eff < dataMin) dataMin = eff
+        if (eff > dataMax) dataMax = eff
       }
     }
     if (!isFinite(dataMin)) { dataMin = 0; dataMax = 1 }  // 全缺测兜底
@@ -155,6 +167,7 @@ export function useGridLayer() {
       targetW:  600,
       targetH:  400,
       frameKey: frameKey(varName, mode, idx),
+      ...(needConvert && dxy ? { dxy, convertToMm: true } : {}),
     }
     worker.postMessage(req)
   }
@@ -199,11 +212,16 @@ export function useGridLayer() {
     }
   }
 
-  // 色卡/阈值变更：清缓存后重渲（bitmap 需用新配色重新生成）
+  // 色卡/阈值/单位变更：清 bitmap 缓存后重渲
   watch(
-    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax],
+    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax, isKgToMm],
     () => { imageCache.clear(); renderCurrent() },
   )
+
+  // var/聚合模式变更：重置单位换算状态
+  watch([() => varStore.selVar, () => timeStore.mode], () => {
+    isKgToMm.value = false
+  })
 
   // var/时间变更：直接重渲（缓存仍有效）
   watch(
@@ -229,7 +247,17 @@ export function useGridLayer() {
   function getValueAt(lat: number, lon: number): number | null {
     const data = jsonCache.get(cacheKey(varStore.selVar, timeStore.mode))
     const frame = data?.[timeStore.currentIndex]
-    return frame ? bilinearInterp(frame, lat, lon) : null
+    if (!frame) return null
+    const val = bilinearInterp(frame, lat, lon)
+    if (val === null) return null
+    if (isKgToMm.value && VARS[varStore.selVar]?.units === 'kg') {
+      const dxy = metaStore.grid?.dxy
+      if (dxy) {
+        const dxyVal = bilinearInterp(dxy as (number | null)[][], lat, lon)
+        return dxyVal && dxyVal > 0 ? val / dxyVal : null
+      }
+    }
+    return val
   }
 
   // 按需加载指定 var + mode 的帧数据，供 HistoryModal 使用

@@ -5,11 +5,13 @@
 export interface RenderRequest {
   frame2d: (number | null)[][]  // shape: (nLat, nLon)，行北→南，列西→东
   lut: Uint8ClampedArray        // 256 * 4 bytes，RGBA，主线程预计算
-  vmin: number                  // 色卡下限（帧数据自动或用户覆盖）
-  vmax: number                  // 色卡上限（帧数据自动或用户覆盖）
+  vmin: number                  // 色卡下限（帧数据自动或用户覆盖，已折算为目标单位）
+  vmax: number                  // 色卡上限（同上）
   targetW: number               // 目标画布宽度（像素）
   targetH: number               // 目标画布高度（像素）
   frameKey: string              // 主线程传入，原样回传，用于缓存匹配
+  dxy?: (number | null)[][]    // shape: (nLat, nLon)，单位 m²；convertToMm 时必传
+  convertToMm?: boolean        // 先除后插值：value[i][j] / dxy[i][j]
 }
 
 export interface RenderResponse {
@@ -22,10 +24,21 @@ export interface RenderResponse {
 // ─── Worker 主逻辑 ────────────────────────────────────────────────────────────
 
 self.onmessage = (e: MessageEvent<RenderRequest>) => {
-  const { frame2d, lut, vmin, vmax, targetW, targetH, frameKey } = e.data
+  const { frame2d, lut, vmin, vmax, targetW, targetH, frameKey, dxy, convertToMm } = e.data
 
   const nLat = frame2d.length
   const nLon = frame2d[0]?.length ?? 0
+
+  // 先除后插值：逐格点将 kg 转为 mm（在双线性升采样之前）
+  if (convertToMm && dxy) {
+    for (let i = 0; i < nLat; i++) {
+      for (let j = 0; j < nLon; j++) {
+        const v = frame2d[i][j]
+        const d = dxy[i]?.[j]
+        frame2d[i][j] = (v !== null && d !== null && d !== undefined && d > 0) ? v / d : null
+      }
+    }
+  }
 
   const pixels = new Uint8ClampedArray(targetW * targetH * 4)
 

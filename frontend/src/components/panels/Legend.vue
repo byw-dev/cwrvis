@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useTimeStore } from '@/stores/time'
 import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
+import { isKgToMm } from '@/composables/useGridLayer'
 import type { ColormapName } from '@/types'
 
 const varStore  = useVarStore()
@@ -15,6 +16,15 @@ const CMAPS: ColormapName[] = ['turbo', 'viridis', 'magma', 'cyan', 'rdbu']
 
 const vm      = computed(() => VARS[varStore.selVar])
 const cmName  = computed(() => settings.getColormap(varStore.selVar))
+const isKgVar = computed(() => vm.value.units === 'kg')
+
+function toggleUnit(): void {
+  isKgToMm.value = !isKgToMm.value
+  // 切换单位时立即清空用户设置的量程，使用新单位的自动量程
+  threshMinInput.value = ''
+  threshMaxInput.value = ''
+  varStore.clearThresh()
+}
 // 优先显示实际渲染量程，若尚未计算则回退配置占位值
 const displayVmin = computed(() => varStore.renderRange?.vmin ?? vm.value.vmin)
 const displayVmax = computed(() => varStore.renderRange?.vmax ?? vm.value.vmax)
@@ -95,7 +105,11 @@ watch([cmName, () => varStore.selVar], drawGradient)
       <span class="var-code">{{ vm.name }}</span>
       <span class="var-name">{{ vm.long_name }}</span>
     </div>
-    <div class="legend-unit">[{{ vm.units }}] · 双线性插值</div>
+    <button v-if="isKgVar" class="legend-unit unit-toggle" @click="toggleUnit">
+      <span class="unit-label">[{{ isKgToMm ? 'mm' : 'kg' }}]</span>
+      <span class="unit-hint">{{ isKgToMm ? '点击以还原为 kg' : '点击以换算为 mm' }}</span>
+    </button>
+    <div v-else class="legend-unit">[{{ vm.units }}] · 双线性插值</div>
 
     <!-- Color ramp -->
     <div class="ramp-wrap">
@@ -165,7 +179,25 @@ watch([cmName, () => varStore.selVar], drawGradient)
 }
 .var-code { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--accent); }
 .var-name { font-size: 0.75rem; color: var(--fg-1); }
-.legend-unit { font-size: 0.625rem; color: var(--fg-3); margin-bottom: 0.5em; font-family: var(--font-mono); }
+.legend-unit {
+  font-size: 0.625rem;
+  color: var(--fg-3);
+  margin-bottom: 0.5em;
+  font-family: var(--font-mono);
+}
+.unit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent);
+}
+.unit-toggle:hover .unit-hint { color: var(--fg-1); }
+.unit-label { font-family: var(--font-mono); font-size: 0.625rem; }
+.unit-hint  { font-family: var(--font-mono); font-size: 0.625rem; color: var(--accent-dim); }
 
 .ramp-wrap { margin-bottom: 0.25em; }
 .ramp-canvas { width: 100%; height: 12px; display: block; }

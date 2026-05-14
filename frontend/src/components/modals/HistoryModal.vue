@@ -6,9 +6,10 @@ import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, Gr
 import { CanvasRenderer } from 'echarts/renderers'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
+import { useMetaStore } from '@/stores/meta'
 import { VARS } from '@/config/vars'
 import { buildItems } from '@/stores/time'
-import { fetchGridFrames } from '@/composables/useGridLayer'
+import { fetchGridFrames, isKgToMm } from '@/composables/useGridLayer'
 import { bilinearInterp } from '@/utils/grid'
 import type { AggMode, VarName } from '@/types'
 
@@ -32,6 +33,15 @@ const emit = defineEmits<{ close: [] }>()
 
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
+const metaStore = useMetaStore()
+
+const effectiveVar = computed(() => VARS[props.varName ?? varStore.selVar])
+const isKgVar      = computed(() => effectiveVar.value.units === 'kg')
+const effectiveUnit = computed(() =>
+  props.mode === 'grid' && isKgVar.value && isKgToMm.value ? 'mm' : effectiveVar.value.units
+)
+
+function toggleUnit(): void { isKgToMm.value = !isKgToMm.value }
 
 const TABS: { key: TabKey; label: string; mode: AggMode; frames: number }[] = [
   { key: 'monthly',     label: '逐月',   mode: 'monthly',     frames: 312 },
@@ -71,7 +81,17 @@ function seriesData(tab: TabKey): { labels: string[]; values: (number | null)[] 
 
   const mode  = TABS.find(t => t.key === tab)!.mode
   const items = buildItems(mode)
-  const values = frames.map(f => bilinearInterp(f, props.lat!, props.lon!))
+
+  // kg→mm：dxy 值对该点插值一次，312 帧共用
+  const needConvert = isKgVar.value && isKgToMm.value
+  const dxy = needConvert ? (metaStore.grid?.dxy ?? null) : null
+  const dxyVal = dxy ? bilinearInterp(dxy as (number | null)[][], props.lat!, props.lon!) : null
+
+  const values = frames.map(f => {
+    const v = bilinearInterp(f, props.lat!, props.lon!)
+    if (!needConvert || v === null || !dxyVal || dxyVal <= 0) return v
+    return v / dxyVal
+  })
   const labels = items.map(it =>
     it.year && it.month ? `${it.year}-${String(it.month).padStart(2,'0')}`
     : it.year   ? String(it.year)
@@ -100,7 +120,7 @@ const currentMarkLine = computed(() => {
 
 function buildOption() {
   const { labels, values } = seriesData(activeTab.value)
-  const meta  = VARS[props.varName ?? varStore.selVar]
+  const meta  = effectiveVar.value
   const isLoading = tabLoading.value[activeTab.value]
 
   const markIdx = currentMarkLine.value
@@ -127,7 +147,7 @@ function buildOption() {
       textStyle: { color: '#b6c2d2', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
       formatter: (params: any[]) => {
         const p = params[0]; if (!p) return ''
-        return `${p.name}<br/>${p.value !== null ? Number(p.value).toPrecision(4) : 'N/D'} ${meta.units}`
+        return `${p.name}<br/>${p.value !== null ? Number(p.value).toPrecision(4) : 'N/D'} ${effectiveUnit.value}`
       },
     },
     xAxis: {
@@ -183,13 +203,23 @@ watch(activeTab, async (tab) => {
 
 // 外部时间变化时更新 markLine
 watch(() => timeStore.currentIndex, updateChart)
+
+// 单位切换时重绘（isKgToMm 为模块级 ref，格点模式 kg var 时有效）
+watch(isKgToMm, updateChart)
 </script>
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="modal-box">
       <div class="modal-head">
-        <span class="modal-title">历史数据 · {{ VARS[props.varName ?? varStore.selVar].long_name }}</span>
+        <div class="modal-head-left">
+          <span class="modal-title">历史数据 · {{ effectiveVar.long_name }}</span>
+          <button
+            v-if="mode === 'grid' && isKgVar"
+            class="unit-toggle-btn"
+            @click="toggleUnit"
+          >{{ isKgToMm ? 'mm→kg' : 'kg→mm' }}</button>
+        </div>
         <button class="modal-close" @click="emit('close')">✕</button>
       </div>
 
@@ -238,7 +268,19 @@ watch(() => timeStore.currentIndex, updateChart)
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-2);
 }
+.modal-head-left { display: flex; align-items: center; gap: 1.25em; }
 .modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); letter-spacing: 0.04em; }
+.unit-toggle-btn {
+  background: none;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  padding: 0.125em 0.5em;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.unit-toggle-btn:hover { background: var(--accent-faint); }
 .modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
 .modal-tabs { display: flex; border-bottom: 1px solid var(--line-1); }
