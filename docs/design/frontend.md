@@ -361,8 +361,9 @@ function getGridCorners(basemap: BasemapConfig): [LngLat, LngLat, LngLat, LngLat
 ```
 主线程：fetch /grid/{gran}/{var}.json（整个 var 在该颗粒度下的全部时间步）
 主线程：解析 JSON，提取当前帧的二维数组 shape=(lat, lon)
-主线程：postMessage({ frame2d, colormap, lutSize, threshMin, threshMax, targetW, targetH }) → Worker
+主线程：postMessage({ frame2d, colormap, lutSize, threshMin, threshMax, targetW, targetH, dxy, convertToMm }) → Worker
 Worker：
+  0. 若 convertToMm，逐格点做 value[i][j] / dxy[i][j]（先除后插值，见「kg→mm 单位换算」节）
   1. 双线性插值（15×25 → targetW×targetH，默认约 600×400）
   2. 256-LUT 色卡查表（value → RGBA）
   3. 阈值过滤（value < threshMin 或 > threshMax → alpha=0；null → alpha=0）
@@ -447,6 +448,60 @@ Worker：
 | 季平均 | `/grid/mean_season/{var}.json` | 4 |
 
 切换 var 或聚合模式时，请求对应 JSON 文件。已加载的文件缓存在内存中，不重复请求。
+
+### kg→mm 单位换算
+
+> Task #2
+
+仅对 `units === 'kg'` 的变量启用。换算公式：`mm = kg / dxy[i][j]`，`dxy` 来自 `/grid/meta.json` 的 `grid.dxy`（shape 15×25，单位 m²）。
+
+**状态**
+
+```typescript
+// composables/useGridLayer.ts
+const isKgToMm = ref(false)
+// 切换 var 或聚合模式时自动 reset
+watch([selVar, mode], () => { isKgToMm.value = false })
+```
+
+Legend 和 HistoryModal 均读写同一 `isKgToMm` ref，保持一致。
+
+**UI — 图例面板（Legend）**
+
+- `units === 'kg'`：单位行显示 `[kg] 点击以换算为 mm`，以 `--accent` 色标注，表示可交互
+- 激活后切换为 `[mm] 点击以还原为 kg`
+- 其他单位：静态文字，不可交互，样式不变
+
+**UI — HistoryModal 标题栏**（仅格点数据模块，`units === 'kg'` 时）
+
+- 标题文字（`历史数据·{varName}`）右侧追加切换按钮，文案 `kg→mm` / `mm→kg`
+- 与标题文字的间距用 `gap`（`em` 单位），禁止使用 `px`
+
+**渲染路径**
+
+| 路径 | 方法 | 说明 |
+|------|------|------|
+| Worker 格点渲染 | 先除后插值：逐格点 `value[i][j] / dxy[i][j]`，再做双线性升采样 | 物理上正确（mm 场再上采样）|
+| HistoryModal 取值点 | 先插值后除：`interp(frame, lat, lon) / interp(dxy, lat, lon)` | `dxy_val` 一次性计算，312 帧共用 |
+
+**缓存策略**
+
+| 缓存层 | 单位切换时 |
+|--------|-----------|
+| 原始帧数据（kg 值） | 保留，不重新 fetch |
+| ImageBitmap 渲染缓存 | 立即全部清空，按新单位重渲染当前帧 |
+
+kg→mm 和 mm→kg 双向切换均不产生额外网络请求。
+
+**量程联动**
+
+切换单位（任意方向）时，立即清除用户手动填写的 min/max，使用自动量程（由新单位数据推算）。用户此后若重新输入 min/max，遵循原有逻辑。
+
+**不适用范围**
+
+区域统计（`RegionHistoryModal`）的数据来自 SQLite 聚合值（区域总量 kg），无对应面积信息，**不实现**单位换算。
+
+---
 
 ### HistoryModal（格点数据）
 
@@ -581,7 +636,7 @@ GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=202
 ### 图例面板（Legend）
 
 - 变量标识：`code` + `long_name`
-- 单位 + 插值方法说明
+- 单位行：`units === 'kg'` 时显示可交互的换算按钮（见「kg→mm 单位换算」节）；其他单位静态展示
 - 统计行：MIN / MEAN / MAX（当前帧的全域统计）
 - 色标条：canvas 渲染，横向渐变
 - 量程刻度：min / mid / max（使用 var 预设量程，非帧内动态）
@@ -805,7 +860,7 @@ pnpm build           # 产物在 frontend/dist/
 **规则**：
 1. **默认（用户未输入）**：每帧独立从当帧数据自动计算 min/max，映射到色卡全范围。颜色含义随帧变化，适合观察帧内相对分布。
 2. **用户覆盖**：在图例阈值输入框输入值后，该值优先于自动计算，且在同一 `var + 聚合模式` 下跨帧保留。
-3. **量程清除时机**：切换 var 或聚合模式时，阈值自动清空（不同模式量程差异大，不可复用）。
+3. **量程清除时机**：切换 var 或聚合模式时阈值自动清空；切换单位（kg↔mm）时同样立即清空，使用新单位下的自动量程。
 4. **超出量程着色**：低于 vmin 按 vmin 的颜色渲染，高于 vmax 按 vmax 的颜色渲染（clamp），而非透明。只有真正的缺测格点（null）才渲染为透明。
 
 **相关文件**：`frontend/src/workers/gridRenderer.worker.ts`、`frontend/src/composables/useGridLayer.ts`、`frontend/src/components/panels/Legend.vue`
