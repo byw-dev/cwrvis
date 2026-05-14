@@ -96,27 +96,57 @@ function updateChart() {
   const labels = buildLabels(mode)
   const markIdx = currentMarkIdx(mode)
 
-  const yAxes: echarts.EChartsOption['yAxis'] = []
-  const unitsSeen: string[] = []
+  // ── Y-axis layout ──────────────────────────────────────────────────────
+  // kg 专占左轴；其他单位依次向右平铺，每轴间距 70px
+  const hasKg = activeVars.value.some(vn => VARS[vn].units === 'kg')
+  const unitsOrdered: string[] = []
+  if (hasKg) unitsOrdered.push('kg')
+  for (const vn of activeVars.value) {
+    const u = VARS[vn].units
+    if (!unitsOrdered.includes(u)) unitsOrdered.push(u)
+  }
 
-  const series = activeVars.value.map((vn, i) => {
-    const meta = VARS[vn]
-    let yAxisIdx = unitsSeen.indexOf(meta.units)
-    if (yAxisIdx === -1) {
-      unitsSeen.push(meta.units)
-      yAxisIdx = unitsSeen.length - 1
+  const unitToAxisIdx = new Map<string, number>()
+  unitsOrdered.forEach((u, i) => unitToAxisIdx.set(u, i))
+
+  const fmtLabel = (v: number) =>
+    v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v)
+
+  const rightCount = unitsOrdered.length - 1
+  const gridRight  = rightCount === 0 ? 20 : 24 + rightCount * 70
+
+  const yAxes = unitsOrdered.map((unit, i) => {
+    const isLeft = i === 0
+    return {
+      type: 'value',
+      name: unit,
+      nameLocation: 'middle',
+      nameRotate: isLeft ? 90 : -90,
+      nameGap: isLeft ? 60 : 32,
+      nameTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      position: isLeft ? 'left' : 'right',
+      offset: isLeft ? undefined : (i - 1) * 70,
+      axisLine: { show: false },
+      splitLine: isLeft ? { lineStyle: { color: '#1f2a37' } } : { show: false },
+      axisLabel: {
+        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+        formatter: fmtLabel,
+      },
     }
+  })
+
+  // ── Series ─────────────────────────────────────────────────────────────
+  const series = activeVars.value.map((vn, i) => {
     const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
     const data = rows.map(r => {
       const v = r[vn as string]
       return typeof v === 'number' ? v : null
     })
-
     return {
       type: 'line' as const,
       name: vn,
       data,
-      yAxisIndex: yAxisIdx,
+      yAxisIndex: unitToAxisIdx.get(VARS[vn].units) ?? 0,
       lineStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length], width: 1.5 },
       itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] },
       symbol: 'none',
@@ -130,20 +160,6 @@ function updateChart() {
     }
   })
 
-  unitsSeen.forEach((unit, i) => {
-    yAxes.push({
-      type: 'value',
-      name: unit,
-      position: i === 0 ? 'left' : 'right',
-      axisLine: { show: false },
-      splitLine: i === 0 ? { lineStyle: { color: '#1f2a37' } } : { show: false },
-      axisLabel: {
-        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
-        formatter: (v: number) => v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v),
-      },
-    } as any)
-  })
-
   chart.value.setOption({
     backgroundColor: 'transparent',
     legend: {
@@ -151,7 +167,7 @@ function updateChart() {
       textStyle: { color: '#b6c2d2', fontSize: 10 },
       inactiveColor: '#3b4a5e',
     },
-    grid: { top: 32, right: unitsSeen.length > 1 ? 60 : 20, bottom: 48, left: 8, containLabel: true },
+    grid: { top: 36, right: gridRight, bottom: 48, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
@@ -269,7 +285,7 @@ watch(() => timeStore.currentIndex, updateChart)
 .modal-box {
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 880px; max-width: calc(100vw - 32px);
+  width: 1040px; max-width: calc(100vw - 32px);
   display: flex; flex-direction: column;
 }
 .modal-head {
@@ -319,5 +335,5 @@ watch(() => timeStore.currentIndex, updateChart)
 .picker-item:disabled { opacity: 0.4; cursor: default; }
 .picker-name { color: var(--fg-3); font-size: 10px; }
 
-.chart-area { width: 100%; height: 420px; }
+.chart-area { width: 100%; height: 500px; }
 </style>
