@@ -209,12 +209,12 @@ onUnmounted(() => {
 
 .right-panel {
   position: fixed;
-  right: 12px;
-  bottom: var(--h-bottom);
+  right: 0.75rem;
+  bottom: calc(var(--h-bottom) + 0.75rem);
   z-index: 100;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.75rem;
   pointer-events: auto;
 }
 
