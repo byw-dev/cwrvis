@@ -48,7 +48,7 @@ function select(id: ModuleId) {
 .product-nav {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--h-nav);
+  min-height: var(--h-nav);
   display: flex;
   align-items: stretch;
   background: rgba(7, 9, 12, 0.96);
@@ -60,10 +60,10 @@ function select(id: ModuleId) {
 .pn-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 16px 0 18px;
+  gap: 0.625em;
+  padding: 0 1em 0 1.125em;
   border-right: 1px solid var(--line-2);
-  min-width: 250px;
+  min-width: 15rem;
   flex-shrink: 0;
 }
 
@@ -74,19 +74,19 @@ function select(id: ModuleId) {
 }
 
 .text .t {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--fg-0);
   letter-spacing: 0.01em;
 }
 
 .text .s {
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: var(--fg-3);
   letter-spacing: 0.22em;
   font-family: var(--font-mono);
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 0.2em;
 }
 
 /* ── Tabs ── */
@@ -101,8 +101,8 @@ function select(id: ModuleId) {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 18px;
-  font-size: 12px;
+  padding: 0 1.125em;
+  font-size: 0.75rem;
   color: var(--fg-2);
   cursor: pointer;
   border-right: 1px solid var(--line-1);
@@ -143,8 +143,8 @@ function select(id: ModuleId) {
 }
 
 .ico {
-  width: 32px;
-  height: 32px;
+  min-width: 2rem;
+  min-height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -153,7 +153,8 @@ function select(id: ModuleId) {
   color: var(--fg-2);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 0.875rem;
+  padding: 0.25em;
 }
 
 .ico:hover { color: var(--accent); background: var(--bg-2); }

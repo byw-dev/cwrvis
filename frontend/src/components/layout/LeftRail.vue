@@ -112,30 +112,30 @@ const GROUPS = VAR_GROUPS   // [{id, label, vars}]
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 0;
-  gap: 2px;
+  padding: 0.375em 0;
+  gap: 0.125em;
 }
 
 .rail-label {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 0.5rem;
   letter-spacing: 0.1em;
   color: var(--fg-3);
   text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 0.25em;
 }
 
 .rail-spacer { flex: 1; }
 
 /* ── Group buttons ── */
 .rail-btn {
-  width: 44px;
+  width: 2.75rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 5px 0;
+  gap: 0.125em;
+  padding: 0.3125em 0;
   background: none;
   border: none;
   color: var(--fg-3);
@@ -166,7 +166,7 @@ const GROUPS = VAR_GROUPS   // [{id, label, vars}]
 
 .rail-btn-label {
   font-family: var(--font-ui);
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: inherit;
   letter-spacing: 0.02em;
   line-height: 1;

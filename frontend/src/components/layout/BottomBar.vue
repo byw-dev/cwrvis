@@ -223,29 +223,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .bottombar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: var(--h-bottom);
+  min-height: var(--h-bottom);
   background: rgba(13, 17, 23, 0.96);
   border-top: 1px solid var(--line-2);
   z-index: 800;
   display: flex;
   flex-direction: column;
-  padding: 8px 16px 10px;
+  padding: 0.5em 1em 0.625em;
 }
 
 /* ── Controls row ── */
 .tl-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375em;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--fg-2);
-  margin-bottom: 6px;
+  margin-bottom: 0.375em;
   flex-shrink: 0;
 }
 
 .pbtn {
-  width: 30px; height: 26px;
+  min-width: 1.875rem;
+  padding: 0.25em 0.5em;
   display: flex; align-items: center; justify-content: center;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
@@ -257,7 +258,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .pbtn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .pbtn.play {
-  width: 38px;
+  min-width: 2.375rem;
   background: var(--accent);
   color: var(--bg-0);
   border-color: var(--accent);
@@ -265,23 +266,23 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .pbtn.play:hover { filter: brightness(1.1); }
 
 .tl-mode-tag {
-  font-size: 9px;
+  font-size: 0.5625rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--fg-3);
-  margin-left: 8px;
+  margin-left: 0.5em;
 }
 .tl-mode-tag .v { color: var(--fg-1); }
 
-.tl-frame { display: flex; align-items: baseline; gap: 10px; margin-left: 12px; }
+.tl-frame { display: flex; align-items: baseline; gap: 0.625em; margin-left: 0.75em; }
 
-.now  { color: var(--accent); font-weight: 600; font-size: 13px; letter-spacing: 0.05em; }
+.now  { color: var(--accent); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.05em; }
 .frac { color: var(--fg-3); }
 
 .spacer { flex: 1; }
 
 .spd-lbl {
-  font-size: 9px;
+  font-size: 0.5625rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--fg-3);
@@ -290,8 +291,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .speed { display: flex; gap: 1px; }
 
 .speed .s {
-  padding: 3px 8px;
-  font-size: 10px;
+  padding: 0.1875em 0.5em;
+  font-size: 0.625rem;
   cursor: pointer;
   color: var(--fg-2);
   background: var(--bg-2);

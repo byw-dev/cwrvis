@@ -239,14 +239,14 @@ const selRegionName = computed(() =>
   position: fixed;
   top: var(--h-nav);
   left: 0; right: 0;
-  height: var(--h-sub);
+  min-height: var(--h-sub);
   z-index: 799;
   background: var(--bg-1);
   border-bottom: 1px solid var(--line-1);
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
+  gap: 0.25em;
+  padding: 0.375em 0.75em;
   overflow: visible;
 }
 
@@ -254,53 +254,48 @@ const selRegionName = computed(() =>
 .var-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 0.3125em;
+  padding: 0.375em 0.625em;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--fg-0);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
   white-space: nowrap;
 }
 .var-btn:hover { background: var(--bg-3); }
 
-.var-code { font-family: var(--font-mono); color: var(--accent); font-size: 11px; }
+.var-code { font-family: var(--font-mono); color: var(--accent); font-size: 0.6875rem; }
 .var-sep  { color: var(--fg-3); }
 .var-name { color: var(--fg-1); }
-.var-unit { font-family: var(--font-mono); color: var(--fg-3); font-size: 10px; }
-.caret    { color: var(--fg-3); font-size: 9px; }
+.var-unit { font-family: var(--font-mono); color: var(--fg-3); font-size: 0.625rem; }
+.caret    { color: var(--fg-3); font-size: 0.5625rem; }
 
 /* ── Mode groups ── */
 .mode-group {
   display: flex;
-  align-items: center;
-  gap: 0;
+  align-items: stretch;
   border: 1px solid var(--line-2);
-  height: 28px;
 }
 
 .mode-group-label {
-  padding: 0 7px;
-  font-size: 10px;
+  padding: 0.375em 0.4375em;
+  font-size: 0.625rem;
   color: var(--fg-3);
   letter-spacing: 0.02em;
   border-right: 1px solid var(--line-2);
-  height: 100%;
   display: flex;
   align-items: center;
 }
 
 .mode-btn {
-  height: 100%;
-  padding: 0 10px;
+  padding: 0.375em 0.625em;
   background: none;
   border: none;
   border-right: 1px solid var(--line-2);
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -312,13 +307,12 @@ const selRegionName = computed(() =>
 .region-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 0.375em;
+  padding: 0.375em 0.625em;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--fg-0);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -327,10 +321,11 @@ const selRegionName = computed(() =>
 /* ── Separator ── */
 .toolbar-sep {
   width: 1px;
-  height: 20px;
+  height: 1.25em;
+  align-self: center;
   background: var(--line-2);
   flex-shrink: 0;
-  margin: 0 4px;
+  margin: 0 0.25em;
 }
 
 /* ── Mode params ── */
@@ -338,21 +333,20 @@ const selRegionName = computed(() =>
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375em;
 }
 
-.param-mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-1); }
-.param-sep  { color: var(--fg-3); font-size: 10px; }
-.param-dim  { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); }
+.param-mono { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--fg-1); }
+.param-sep  { color: var(--fg-3); font-size: 0.625rem; }
+.param-dim  { font-family: var(--font-mono); font-size: 0.625rem; color: var(--fg-3); }
 
 .param-btn {
-  height: 22px;
-  padding: 0 8px;
+  padding: 0.25em 0.5em;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   cursor: pointer;
 }
 
@@ -366,12 +360,11 @@ const selRegionName = computed(() =>
 }
 
 .season-pill {
-  height: 22px;
-  padding: 0 8px;
+  padding: 0.25em 0.5em;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 .season-pill.active {
@@ -409,8 +402,8 @@ const selRegionName = computed(() =>
 }
 
 .dropdown-group-label {
-  padding: 6px 10px 3px;
-  font-size: 9px;
+  padding: 0.375em 0.625em 0.1875em;
+  font-size: 0.5625rem;
   letter-spacing: 0.1em;
   color: var(--fg-3);
   text-transform: uppercase;
@@ -421,22 +414,22 @@ const selRegionName = computed(() =>
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375em;
   width: 100%;
-  padding: 5px 10px;
+  padding: 0.3125em 0.625em;
   background: none;
   border: none;
   color: var(--fg-1);
-  font-size: 12px;
+  font-size: 0.75rem;
   text-align: left;
   cursor: pointer;
 }
 .dropdown-item:hover { background: var(--bg-3); }
 .dropdown-item.active { color: var(--accent); background: var(--accent-faint); }
 
-.item-code { font-family: var(--font-mono); font-size: 10px; color: var(--accent); min-width: 52px; }
-.item-name { flex: 1; font-size: 11px; }
-.item-unit { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); }
+.item-code { font-family: var(--font-mono); font-size: 0.625rem; color: var(--accent); min-width: 3.25rem; }
+.item-name { flex: 1; font-size: 0.6875rem; }
+.item-unit { font-family: var(--font-mono); font-size: 0.5625rem; color: var(--fg-3); }
 
 .region-dot { color: var(--accent); margin-right: 4px; visibility: hidden; }
 .region-dot.on { visibility: visible; }
