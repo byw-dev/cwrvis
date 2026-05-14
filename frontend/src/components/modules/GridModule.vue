@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useMap } from '@/composables/useMap'
-import { useGridLayer } from '@/composables/useGridLayer'
+import { useGridLayer, isKgToMm } from '@/composables/useGridLayer'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import HoverTooltip from '@/components/map/HoverTooltip.vue'
@@ -17,6 +17,11 @@ const { map }                         = useMap()
 const { getValueAt, renderTick }      = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
+
+// 当前实际显示的单位（mm 模式下 kg var 展示 mm）
+const effectiveUnit = computed(() =>
+  isKgToMm.value && varStore.varMeta.units === 'kg' ? 'mm' : varStore.varMeta.units
+)
 
 // ── Frame label ───────────────────────────────────────────────────────────────
 
@@ -45,10 +50,10 @@ const showHistory   = ref(false)
 // 初始展示的历史 tab（与当前聚合模式对应）
 const historyInitTab = ref<'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'>('monthly')
 
-// 每次帧渲染完毕（jsonCache 已更新）或时间帧切换后，重算 hover 和 pick 的值
+// 帧渲染完毕、时间帧切换、或单位切换后，重算 hover 和 pick 的值
 // 用 renderTick 而非 varStore.selVar，避免在新 var 数据加载前就读到 null
 watch(
-  [renderTick, () => timeStore.currentIndex, () => timeStore.mode],
+  [renderTick, () => timeStore.currentIndex, () => timeStore.mode, isKgToMm],
   () => {
     if (hover.value) {
       hover.value = { ...hover.value, value: getValueAt(hover.value.lat, hover.value.lng) }
@@ -152,7 +157,7 @@ onUnmounted(() => {
     :lat="hover.lat"
     :lon="hover.lng"
     :value="hover.value"
-    :unit="varStore.varMeta.units"
+    :unit="effectiveUnit"
     :frame-label="frameLabel"
     :var-name="varStore.selVar"
   />
@@ -174,7 +179,7 @@ onUnmounted(() => {
       :frame-label="frameLabel"
       :var-name="varStore.selVar"
       :value="pickedValue"
-      :unit="varStore.varMeta.units"
+      :unit="effectiveUnit"
       :show-history="timeStore.mode !== 'avg_yearly'"
       @clear="clearPick"
       @history="openHistory"

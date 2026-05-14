@@ -13,7 +13,7 @@ import type { AggMode } from '@/types'
 // kg→mm 换算状态：模块级，Legend 与 HistoryModal 共享
 export const isKgToMm = ref(false)
 
-type FrameData = { imageData: ImageData }
+type FrameData = { imageData: ImageData; vmin: number; vmax: number }
 
 const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/grid'
 
@@ -72,7 +72,9 @@ class LruCache<V> {
   }
 }
 
-const imageCache = new LruCache<FrameData>(20)
+const imageCache    = new LruCache<FrameData>(20)
+// sendToWorker 与 worker.onmessage 之间传递量程，避免异步丢失
+const pendingRanges = new Map<string, { vmin: number; vmax: number }>()
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
@@ -91,7 +93,13 @@ export function useGridLayer() {
   // Receive rendered pixels from Worker
   worker.onmessage = (e: MessageEvent<RenderResponse>) => {
     const { pixels, width, height, frameKey } = e.data
-    const frameData: FrameData = { imageData: new ImageData(new Uint8ClampedArray(pixels), width, height) }
+    const range = pendingRanges.get(frameKey) ?? { vmin: 0, vmax: 1 }
+    pendingRanges.delete(frameKey)
+    const frameData: FrameData = {
+      imageData: new ImageData(new Uint8ClampedArray(pixels), width, height),
+      vmin: range.vmin,
+      vmax: range.vmax,
+    }
     imageCache.set(frameKey, frameData)
     if (frameKey === currentFrameKey()) {
       applyBitmap(frameData)
@@ -159,6 +167,9 @@ export function useGridLayer() {
 
     varStore.setRenderRange(vmin, vmax)
 
+    const fk = frameKey(varName, mode, idx)
+    pendingRanges.set(fk, { vmin, vmax })
+
     const req: RenderRequest = {
       frame2d,
       lut,
@@ -166,7 +177,7 @@ export function useGridLayer() {
       vmax,
       targetW:  600,
       targetH:  400,
-      frameKey: frameKey(varName, mode, idx),
+      frameKey: fk,
       ...(needConvert && dxy ? { dxy, convertToMm: true } : {}),
     }
     worker.postMessage(req)
@@ -178,6 +189,7 @@ export function useGridLayer() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.putImageData(frame.imageData, 0, 0)
+    varStore.setRenderRange(frame.vmin, frame.vmax)
     renderTick.value++
   }
 
