@@ -33,20 +33,13 @@ function select(id: ModuleId) {
         class="tab"
         :class="{ active: activeModule === m.id }"
         @click="select(m.id)"
-      >
-        <span class="num">{{ m.num }}</span>
-        {{ m.label }}
-      </div>
+      >{{ m.label }}</div>
     </div>
 
     <!-- Right end -->
     <div class="pn-end">
       <button class="ico" title="帮助" aria-label="帮助">?</button>
       <button class="ico" title="设置" aria-label="设置" @click="emit('open-settings')">⚙</button>
-      <div class="who">
-        <span class="avatar" aria-hidden="true">RY</span>
-        <span>研究员</span>
-      </div>
     </div>
   </nav>
 </template>
@@ -138,15 +131,6 @@ function select(id: ModuleId) {
   background: var(--accent);
 }
 
-.num {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--fg-3);
-  margin-right: 6px;
-  letter-spacing: 0.1em;
-}
-
-.tab.active .num { color: var(--accent-dim); }
 
 /* ── Right end ── */
 .pn-end {
@@ -155,6 +139,7 @@ function select(id: ModuleId) {
   gap: 4px;
   padding: 0 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .ico {
@@ -173,29 +158,4 @@ function select(id: ModuleId) {
 
 .ico:hover { color: var(--accent); background: var(--bg-2); }
 
-.who {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 8px;
-  font-size: 11px;
-  color: var(--fg-1);
-  border-left: 1px solid var(--line-2);
-  margin-left: 4px;
-  height: 100%;
-}
-
-.avatar {
-  width: 22px;
-  height: 22px;
-  background: linear-gradient(135deg, #2e7d92, #58e0ff);
-  color: var(--bg-0);
-  font-weight: 600;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-}
 </style>

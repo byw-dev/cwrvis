@@ -10,7 +10,6 @@ import GridModule from '@/components/modules/GridModule.vue'
 import RegionModule from '@/components/modules/RegionModule.vue'
 import ExportModule from '@/components/modules/ExportModule.vue'
 import SettingsPanel from '@/components/panels/SettingsPanel.vue'
-import PlaceholderModule from '@/components/modules/PlaceholderModule.vue'
 import type { ModuleId } from '@/types'
 
 const metaStore    = useMetaStore()
@@ -54,7 +53,6 @@ const showMap = computed(() =>
     <GridModule   v-if="activeModule === 'grid'" />
     <RegionModule v-else-if="activeModule === 'region'" />
     <ExportModule v-else-if="activeModule === 'export'" />
-    <PlaceholderModule v-else-if="!showMap" :module-id="activeModule" />
 
     <BottomBar v-if="showBottomBar" />
 

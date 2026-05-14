@@ -111,24 +111,17 @@ export interface PickedPoint {
 
 // ─── Module routing ──────────────────────────────────────────────────────────
 
-export type ModuleId =
-  | 'overview' | 'grid' | 'region'
-  | 'series'   | 'station' | 'model' | 'export'
+export type ModuleId = 'grid' | 'region' | 'export'
 
 export interface ModuleDef {
   id: ModuleId
-  num: string
   label: string
 }
 
 export const MODULE_LIST: ModuleDef[] = [
-  { id: 'overview', num: '01', label: '总览'     },
-  { id: 'grid',     num: '02', label: '格点数据' },
-  { id: 'region',   num: '03', label: '区域统计' },
-  { id: 'series',   num: '04', label: '时序分析' },
-  { id: 'station',  num: '05', label: '站点观测' },
-  { id: 'model',    num: '06', label: '模式诊断' },
-  { id: 'export',   num: '07', label: '数据导出' },
+  { id: 'grid',   label: '格点数据' },
+  { id: 'region', label: '区域统计' },
+  { id: 'export', label: '数据导出' },
 ]
 
 // ─── API response envelope ───────────────────────────────────────────────────

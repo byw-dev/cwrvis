@@ -9,7 +9,7 @@ const timeStore     = useTimeStore()
 const settingsStore = useSettingsStore()
 
 const trackRef = ref<HTMLElement | null>(null)
-const SPEEDS: number[] = [0.5, 1, 2, 4]
+const SPEEDS: number[] = [0.25, 0.5, 1, 2]
 
 // ── Derived state ─────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ function stopInterval() {
 function startInterval() {
   stopInterval()
   if (!timeStore.playing || isStatic.value) return
-  const ms = Math.max(80, 300 / currentSpeed.value)
+  const ms = Math.max(80, 1000 / currentSpeed.value)
   intervalId.value = setInterval(() => timeStore.stepForwardWrapping(), ms)
 }
 
