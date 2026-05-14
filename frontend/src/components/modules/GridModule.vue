@@ -210,7 +210,7 @@ onUnmounted(() => {
 .right-panel {
   position: fixed;
   right: 12px;
-  bottom: 52px;   /* BottomBar 高度上方 */
+  bottom: var(--h-bottom);
   z-index: 100;
   display: flex;
   flex-direction: column;

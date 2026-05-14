@@ -27,6 +27,13 @@ watch(() => varStore.selVar, () => {
   threshMaxInput.value = ''
 }, { immediate: true })
 
+function fmtThreshVal(s: string): string {
+  if (s === '') return ''
+  const n = parseFloat(s)
+  if (isNaN(n)) return s
+  return Math.abs(n) >= 1e4 ? n.toExponential(2) : String(n)
+}
+
 function applyThresh() {
   const mn = threshMinInput.value === '' ? null : parseFloat(threshMinInput.value)
   const mx = threshMaxInput.value === '' ? null : parseFloat(threshMaxInput.value)
@@ -34,6 +41,8 @@ function applyThresh() {
     mn !== null && !isNaN(mn) ? mn : null,
     mx !== null && !isNaN(mx) ? mx : null,
   )
+  threshMinInput.value = fmtThreshVal(threshMinInput.value)
+  threshMaxInput.value = fmtThreshVal(threshMaxInput.value)
 }
 
 function clearThresh() {
@@ -113,7 +122,8 @@ watch([cmName, () => varStore.selVar], drawGradient)
         v-model="threshMinInput"
         class="thresh-input"
         placeholder="最小值"
-        type="number"
+        type="text"
+        inputmode="decimal"
         @change="applyThresh"
       />
       <span class="thresh-sep">–</span>
@@ -121,7 +131,8 @@ watch([cmName, () => varStore.selVar], drawGradient)
         v-model="threshMaxInput"
         class="thresh-input"
         placeholder="最大值"
-        type="number"
+        type="text"
+        inputmode="decimal"
         @change="applyThresh"
       />
       <button
