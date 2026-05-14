@@ -9,7 +9,7 @@ const timeStore     = useTimeStore()
 const settingsStore = useSettingsStore()
 
 const trackRef = ref<HTMLElement | null>(null)
-const SPEEDS: number[] = [0.25, 0.5, 1, 2]
+const SPEEDS: number[] = [0.5, 1, 2, 4]
 
 // ── Derived state ─────────────────────────────────────────────────────────────
 
