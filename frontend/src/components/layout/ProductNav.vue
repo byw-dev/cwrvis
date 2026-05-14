@@ -33,20 +33,13 @@ function select(id: ModuleId) {
         class="tab"
         :class="{ active: activeModule === m.id }"
         @click="select(m.id)"
-      >
-        <span class="num">{{ m.num }}</span>
-        {{ m.label }}
-      </div>
+      >{{ m.label }}</div>
     </div>
 
     <!-- Right end -->
     <div class="pn-end">
       <button class="ico" title="帮助" aria-label="帮助">?</button>
       <button class="ico" title="设置" aria-label="设置" @click="emit('open-settings')">⚙</button>
-      <div class="who">
-        <span class="avatar" aria-hidden="true">RY</span>
-        <span>研究员</span>
-      </div>
     </div>
   </nav>
 </template>
@@ -55,7 +48,7 @@ function select(id: ModuleId) {
 .product-nav {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--h-nav);
+  min-height: var(--h-nav);
   display: flex;
   align-items: stretch;
   background: rgba(7, 9, 12, 0.96);
@@ -67,10 +60,10 @@ function select(id: ModuleId) {
 .pn-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 16px 0 18px;
+  gap: 0.625em;
+  padding: 0 1em 0 1.125em;
   border-right: 1px solid var(--line-2);
-  min-width: 250px;
+  min-width: 15rem;
   flex-shrink: 0;
 }
 
@@ -81,19 +74,19 @@ function select(id: ModuleId) {
 }
 
 .text .t {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--fg-0);
   letter-spacing: 0.01em;
 }
 
 .text .s {
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: var(--fg-3);
   letter-spacing: 0.22em;
   font-family: var(--font-mono);
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 0.2em;
 }
 
 /* ── Tabs ── */
@@ -108,8 +101,8 @@ function select(id: ModuleId) {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 18px;
-  font-size: 12px;
+  padding: 0 1.125em;
+  font-size: 0.75rem;
   color: var(--fg-2);
   cursor: pointer;
   border-right: 1px solid var(--line-1);
@@ -138,15 +131,6 @@ function select(id: ModuleId) {
   background: var(--accent);
 }
 
-.num {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--fg-3);
-  margin-right: 6px;
-  letter-spacing: 0.1em;
-}
-
-.tab.active .num { color: var(--accent-dim); }
 
 /* ── Right end ── */
 .pn-end {
@@ -155,11 +139,12 @@ function select(id: ModuleId) {
   gap: 4px;
   padding: 0 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .ico {
-  width: 32px;
-  height: 32px;
+  min-width: 2rem;
+  min-height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,34 +153,10 @@ function select(id: ModuleId) {
   color: var(--fg-2);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 0.875rem;
+  padding: 0.25em;
 }
 
 .ico:hover { color: var(--accent); background: var(--bg-2); }
 
-.who {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 8px;
-  font-size: 11px;
-  color: var(--fg-1);
-  border-left: 1px solid var(--line-2);
-  margin-left: 4px;
-  height: 100%;
-}
-
-.avatar {
-  width: 22px;
-  height: 22px;
-  background: linear-gradient(135deg, #2e7d92, #58e0ff);
-  color: var(--bg-0);
-  font-weight: 600;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-}
 </style>

@@ -2,103 +2,88 @@
 import { ref, computed, watch, onMounted, shallowRef } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
+import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { VARS } from '@/config/vars'
 import { buildItems } from '@/stores/time'
+import { fetchGridFrames } from '@/composables/useGridLayer'
+import { bilinearInterp } from '@/utils/grid'
 import type { AggMode, VarName } from '@/types'
 
-echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
+echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, GraphicComponent, CanvasRenderer])
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'
+
 const props = defineProps<{
-  // Grid mode: provide lat/lon + gridData
   mode: 'grid' | 'region'
-  // Grid mode props
   lat?: number
   lon?: number
   varName?: VarName
-  // The full JSON frames data per gran (provided by GridModule)
-  gridData?: Record<string, (number | null)[][][]>
+  initialTab?: TabKey  // 打开时默认选中的 tab（由父组件按当前聚合模式传入）
 }>()
 
 const emit = defineEmits<{ close: [] }>()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-const timeStore  = useTimeStore()
-const varStore   = useVarStore()
+const timeStore = useTimeStore()
+const varStore  = useVarStore()
 
-type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'
-const TABS: { key: TabKey; label: string; frames: number }[] = [
-  { key: 'monthly',     label: '逐月',   frames: 312 },
-  { key: 'yearly',      label: '逐年',   frames: 26  },
-  { key: 'avg_monthly', label: '月平均', frames: 12  },
-  { key: 'avg_season',  label: '季平均', frames: 4   },
+const TABS: { key: TabKey; label: string; mode: AggMode; frames: number }[] = [
+  { key: 'monthly',     label: '逐月',   mode: 'monthly',     frames: 312 },
+  { key: 'yearly',      label: '逐年',   mode: 'yearly',      frames: 26  },
+  { key: 'avg_monthly', label: '月平均', mode: 'avg_monthly', frames: 12  },
+  { key: 'avg_season',  label: '季平均', mode: 'avg_season',  frames: 4   },
 ]
 
-const activeTab = ref<TabKey>('monthly')
+const activeTab = ref<TabKey>(props.initialTab ?? 'monthly')
 const chartEl   = ref<HTMLDivElement>()
 const chart     = shallowRef<echarts.ECharts | null>(null)
 
-// ── Bilinear interpolation ────────────────────────────────────────────────────
+// 懒加载缓存：key = TabKey，value = 帧数组
+const tabData    = ref<Partial<Record<TabKey, (number | null)[][][]>>>({})
+const tabLoading = ref<Partial<Record<TabKey, boolean>>>({})
 
-function bilinear(frame2d: (number | null)[][], lat: number, lon: number): number | null {
-  // Grid: lat 39.5→25.5 (step -1), lon 75.5→99.5 (step +1)
-  const latStart = 39.5, latStep = -1
-  const lonStart = 75.5, lonStep =  1
+// ── 懒加载：按 tab 按需 fetch ─────────────────────────────────────────────────
 
-  const gy = (lat - latStart) / latStep
-  const gx = (lon - lonStart) / lonStep
+async function loadTab(tab: TabKey): Promise<void> {
+  if (tabData.value[tab] || tabLoading.value[tab]) return
+  if (props.mode !== 'grid' || !props.varName) return
 
-  const gy0 = Math.floor(gy), gy1 = Math.min(gy0 + 1, frame2d.length - 1)
-  const gx0 = Math.floor(gx), gx1 = Math.min(gx0 + 1, (frame2d[0]?.length ?? 1) - 1)
-  if (gy0 < 0 || gx0 < 0) return null
-
-  const ty = gy - gy0, tx = gx - gx0
-  let wSum = 0, vSum = 0
-  const corners = [[gy0,gx0,(1-tx)*(1-ty)],[gy0,gx1,tx*(1-ty)],[gy1,gx0,(1-tx)*ty],[gy1,gx1,tx*ty]] as const
-  for (const [yi, xi, w] of corners) {
-    const v = frame2d[yi]?.[xi]
-    if (v !== null && v !== undefined) { vSum += v * w; wSum += w }
-  }
-  return wSum > 0 ? vSum / wSum : null
+  tabLoading.value = { ...tabLoading.value, [tab]: true }
+  const mode = TABS.find(t => t.key === tab)!.mode
+  const data = await fetchGridFrames(props.varName, mode)
+  if (data) tabData.value = { ...tabData.value, [tab]: data }
+  tabLoading.value = { ...tabLoading.value, [tab]: false }
+  updateChart()
 }
 
 // ── Series data ───────────────────────────────────────────────────────────────
 
-const GRAN_PATH: Record<TabKey, AggMode> = {
-  monthly: 'monthly', yearly: 'yearly', avg_monthly: 'avg_monthly', avg_season: 'avg_season',
-}
-
 function seriesData(tab: TabKey): { labels: string[]; values: (number | null)[] } {
-  if (props.mode !== 'grid' || !props.lat || !props.lon || !props.gridData) {
-    return { labels: [], values: [] }
-  }
-
-  const granPath: Record<TabKey, string> = {
-    monthly: 'month', yearly: 'year', avg_monthly: 'mean_month', avg_season: 'mean_season',
-  }
-  const frames = props.gridData[granPath[tab]]
+  if (props.mode !== 'grid' || !props.lat || !props.lon) return { labels: [], values: [] }
+  const frames = tabData.value[tab]
   if (!frames) return { labels: [], values: [] }
 
-  const items = buildItems(GRAN_PATH[tab])
-  const values = frames.map(f => bilinear(f, props.lat!, props.lon!))
+  const mode  = TABS.find(t => t.key === tab)!.mode
+  const items = buildItems(mode)
+  const values = frames.map(f => bilinearInterp(f, props.lat!, props.lon!))
   const labels = items.map(it =>
     it.year && it.month ? `${it.year}-${String(it.month).padStart(2,'0')}`
-    : it.year ? String(it.year)
-    : it.month ? `${String(it.month).padStart(2,'0')}月`
-    : it.season ?? it.label
+    : it.year   ? String(it.year)
+    : it.month  ? `${String(it.month).padStart(2,'0')}月`
+    : it.season ?? it.label ?? ''
   )
   return { labels, values }
 }
 
 const currentMarkLine = computed(() => {
-  const tab = activeTab.value
-  const mode = GRAN_PATH[tab] as AggMode
+  const tab  = activeTab.value
+  const mode = TABS.find(t => t.key === tab)!.mode
   const items = buildItems(mode)
   const idx = items.findIndex(it => {
     const s = timeStore.sel
@@ -115,18 +100,26 @@ const currentMarkLine = computed(() => {
 
 function buildOption() {
   const { labels, values } = seriesData(activeTab.value)
-  const meta = VARS[props.varName ?? varStore.selVar]
+  const meta  = VARS[props.varName ?? varStore.selVar]
+  const isLoading = tabLoading.value[activeTab.value]
 
-  const markLine = currentMarkLine.value !== null ? {
+  const markIdx = currentMarkLine.value
+  const markLine = markIdx !== null ? {
     silent: true,
     symbol: 'none',
-    lineStyle: { color: '#ffba49', width: 1.5, type: 'solid' },
-    data: [{ xAxis: currentMarkLine.value }],
+    lineStyle: { color: '#ffba49', width: 1.5, type: 'dashed' },
+    label: { formatter: '{b}', color: '#ffba49', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+    data: [{ xAxis: markIdx, name: labels[markIdx] ?? String(markIdx) }],
   } : undefined
 
   return {
     backgroundColor: 'transparent',
-    grid: { top: 28, right: 20, bottom: 48, left: 60, containLabel: false },
+    graphic: isLoading ? [{
+      type: 'text',
+      left: 'center', top: 'middle',
+      style: { text: '加载中…', fill: '#54606f', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' },
+    }] : [],
+    grid: { top: 28, right: 20, bottom: 48, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
@@ -138,13 +131,12 @@ function buildOption() {
       },
     },
     xAxis: {
-      type: 'category',
-      data: labels,
+      type: 'category', data: labels,
       axisLine: { lineStyle: { color: '#1f2a37' } },
       axisTick: { show: false },
       axisLabel: {
         color: '#54606f', fontSize: 9,
-        interval: Math.floor(labels.length / 12),
+        interval: Math.floor(Math.max(labels.length / 12, 0)),
         fontFamily: 'JetBrains Mono, monospace',
       },
     },
@@ -152,11 +144,13 @@ function buildOption() {
       type: 'value',
       axisLine: { show: false },
       splitLine: { lineStyle: { color: '#1f2a37' } },
-      axisLabel: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      axisLabel: {
+        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+        formatter: (v: number) => v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v),
+      },
     },
     series: [{
-      type: 'line',
-      data: values,
+      type: 'line', data: values,
       lineStyle: { color: '#58e0ff', width: 1.5 },
       itemStyle: { color: '#58e0ff' },
       symbol: 'none',
@@ -170,20 +164,24 @@ function updateChart() {
   chart.value.setOption(buildOption(), true)
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (chartEl.value) {
     chart.value = echarts.init(chartEl.value, null, { renderer: 'canvas' })
     chart.value.on('click', (params: any) => {
-      // Jump to the clicked frame
-      const items = buildItems(GRAN_PATH[activeTab.value] as AggMode)
-      const it = items[params.dataIndex]
-      if (it) { timeStore.goToIndex(params.dataIndex); emit('close') }
+      timeStore.goToIndex(params.dataIndex)
+      emit('close')
     })
-    updateChart()
   }
+  await loadTab(activeTab.value)
 })
 
-watch(activeTab, updateChart)
+// tab 切换时懒加载（切换不影响外部 timeStore.mode）
+watch(activeTab, async (tab) => {
+  updateChart()          // 先刷新（可能显示空/loading）
+  await loadTab(tab)    // 异步加载后会再次 updateChart
+})
+
+// 外部时间变化时更新 markLine
 watch(() => timeStore.currentIndex, updateChart)
 </script>
 
@@ -201,7 +199,11 @@ watch(() => timeStore.currentIndex, updateChart)
           class="tab-btn"
           :class="{ active: activeTab === t.key }"
           @click="activeTab = t.key"
-        >{{ t.label }}<span class="tab-frames">{{ t.frames }}帧</span></button>
+        >
+          {{ t.label }}
+          <span class="tab-frames">{{ t.frames }}帧</span>
+          <span v-if="tabLoading[t.key]" class="tab-loading">…</span>
+        </button>
       </div>
 
       <div ref="chartEl" class="chart-area" />
@@ -220,71 +222,34 @@ watch(() => timeStore.currentIndex, updateChart)
   align-items: center;
   justify-content: center;
 }
-
 .modal-box {
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 880px;
-  max-width: calc(100vw - 32px);
+  width: 55rem;
+  max-width: calc(100vw - 2em);
   display: flex;
   flex-direction: column;
 }
-
 .modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 0.625em 1em;
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-2);
 }
-
-.modal-title {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--fg-1);
-  letter-spacing: 0.04em;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--fg-3);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
-}
+.modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); letter-spacing: 0.04em; }
+.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
-
-.modal-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--line-1);
-}
-
+.modal-tabs { display: flex; border-bottom: 1px solid var(--line-1); }
 .tab-btn {
-  height: 36px;
-  padding: 0 16px;
-  background: none;
-  border: none;
-  border-right: 1px solid var(--line-1);
-  color: var(--fg-3);
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 0.625em 1em; background: none; border: none;
+  border-right: 1px solid var(--line-1); color: var(--fg-3); font-size: 0.75rem;
+  cursor: pointer; display: flex; align-items: center; gap: 0.375em;
 }
 .tab-btn:hover { background: var(--bg-3); color: var(--fg-1); }
 .tab-btn.active { color: var(--accent); background: var(--accent-faint); }
-
-.tab-frames {
-  font-size: 9px;
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-}
-
-.chart-area {
-  width: 100%;
-  height: 420px;
-}
+.tab-frames { font-size: 0.5625rem; color: var(--fg-3); font-family: var(--font-mono); }
+.tab-loading { font-size: 0.5625rem; color: var(--accent); }
+.chart-area { width: 100%; height: 420px; }
 </style>

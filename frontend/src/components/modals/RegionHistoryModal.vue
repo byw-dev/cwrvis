@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, shallowRef } from 'vue'
+import { ref, computed, watch, onMounted, shallowRef, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
@@ -35,6 +35,16 @@ const chartEl = ref<HTMLDivElement>()
 const chart   = shallowRef<echarts.ECharts | null>(null)
 
 const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
+const SYMBOLS       = ['circle', 'rect', 'triangle', 'diamond', 'roundRect'] as const
+const LINE_TYPES    = ['solid', 'dashed', 'dotted'] as const
+
+// px per right Y-axis: tick labels (non-kg ≤ 4 chars at fontSize 9 ≈ 28px) + axis + padding
+const AXIS_W = 58
+
+const rightAxisCount  = ref(0)
+const hoveredSeries   = ref<string | null>(null)
+// modal width grows with each additional right axis; capped by viewport
+const modalWidth = computed(() => Math.min(1280, 800 + rightAxisCount.value * AXIS_W))
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -96,63 +106,121 @@ function updateChart() {
   const labels = buildLabels(mode)
   const markIdx = currentMarkIdx(mode)
 
-  const yAxes: echarts.EChartsOption['yAxis'] = []
-  const unitsSeen: string[] = []
+  // ── Y-axis layout ──────────────────────────────────────────────────────
+  // kg 专占左轴；其他单位依次向右平铺，每轴间距 70px
+  const hasKg = activeVars.value.some(vn => VARS[vn].units === 'kg')
+  const unitsOrdered: string[] = []
+  if (hasKg) unitsOrdered.push('kg')
+  for (const vn of activeVars.value) {
+    const u = VARS[vn].units
+    if (!unitsOrdered.includes(u)) unitsOrdered.push(u)
+  }
+
+  const unitToAxisIdx = new Map<string, number>()
+  unitsOrdered.forEach((u, i) => unitToAxisIdx.set(u, i))
+
+  const fmtLabel = (v: number) =>
+    v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v)
+
+  const rightCount = unitsOrdered.length - 1
+  rightAxisCount.value = rightCount
+  const gridRight = rightCount === 0 ? 20 : 20 + rightCount * AXIS_W
+
+  const yAxes = unitsOrdered.map((unit, i) => {
+    const isLeft = i === 0
+    return {
+      type: 'value',
+      name: unit,
+      nameLocation: 'end',   // unit label sits just above the topmost tick
+      nameGap: 6,
+      nameTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      position: isLeft ? 'left' : 'right',
+      offset: isLeft ? undefined : (i - 1) * AXIS_W,
+      axisLine: { show: false },
+      splitLine: isLeft ? { lineStyle: { color: '#1f2a37' } } : { show: false },
+      axisLabel: {
+        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+        formatter: fmtLabel,
+      },
+    }
+  })
+
+  // ── Series ─────────────────────────────────────────────────────────────
+  // monthly has 312 dense points — symbols clutter the line; show them for other modes
+  const showSymbol = mode !== 'monthly'
 
   const series = activeVars.value.map((vn, i) => {
-    const meta = VARS[vn]
-    let yAxisIdx = unitsSeen.indexOf(meta.units)
-    if (yAxisIdx === -1) {
-      unitsSeen.push(meta.units)
-      yAxisIdx = unitsSeen.length - 1
-    }
+    const color    = SERIES_COLORS[i % SERIES_COLORS.length]
+    const symbol   = SYMBOLS[i % SYMBOLS.length]
+    const lineType = LINE_TYPES[i % LINE_TYPES.length]
     const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
     const data = rows.map(r => {
       const v = r[vn as string]
       return typeof v === 'number' ? v : null
     })
-
     return {
       type: 'line' as const,
       name: vn,
       data,
-      yAxisIndex: yAxisIdx,
-      lineStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length], width: 1.5 },
-      itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] },
-      symbol: 'none',
+      yAxisIndex: unitToAxisIdx.get(VARS[vn].units) ?? 0,
+      symbol,
+      symbolSize: 5,
+      showSymbol,
+      lineStyle: { color, width: 1.5, type: lineType },
+      itemStyle: { color },
+      // hover: highlight this series, fade all others
+      emphasis: { focus: 'series', lineStyle: { width: 2.5 } },
+      blur:     { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
       markLine: markIdx !== null && i === 0 ? {
         silent: true,
         symbol: 'none',
         lineStyle: { color: '#ffba49', width: 1.5 },
-        data: [{ xAxis: markIdx }],
+        label: { formatter: '{b}', color: '#ffba49', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+        data: [{ xAxis: markIdx, name: labels[markIdx] ?? String(markIdx) }],
       } : undefined,
     }
-  })
-
-  unitsSeen.forEach((unit, i) => {
-    yAxes.push({
-      type: 'value',
-      name: unit,
-      position: i === 0 ? 'left' : 'right',
-      axisLine: { show: false },
-      splitLine: i === 0 ? { lineStyle: { color: '#1f2a37' } } : { show: false },
-      axisLabel: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
-    } as any)
   })
 
   chart.value.setOption({
     backgroundColor: 'transparent',
     legend: {
-      top: 4, right: 16,
-      textStyle: { color: '#b6c2d2', fontSize: 10 },
+      type: 'scroll',
+      bottom: 4,
+      left: 'center',
+      orient: 'horizontal',
+      itemWidth: 14,
+      itemHeight: 8,
+      textStyle: { color: '#b6c2d2', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' },
       inactiveColor: '#3b4a5e',
+      pageIconColor: '#58e0ff',
+      pageTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
     },
-    grid: { top: 32, right: unitsSeen.length > 1 ? 60 : 20, bottom: 48, left: 60 },
+    grid: { top: 24, right: gridRight, bottom: 60, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
       borderColor: '#2a3645',
       textStyle: { color: '#b6c2d2', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+      formatter: (params: any[]) => {
+        if (!params.length) return ''
+        const active = hoveredSeries.value
+        let html = `<div style="margin-bottom:4px;color:#b6c2d2">${params[0].axisValue}</div>`
+        for (const p of params) {
+          const meta   = VARS[p.seriesName as VarName]
+          const val    = p.value
+          const valStr = val === null || val === undefined ? 'N/D'
+            : Math.abs(Number(val)) >= 1e6 ? Number(val).toExponential(3)
+            : Number(val).toPrecision(4)
+          const isActive = !active || p.seriesName === active
+          const fg     = isActive ? '#e8f4ff' : '#3a4d62'
+          const weight = isActive ? '600' : '400'
+          html += `<div style="color:${fg};font-weight:${weight};line-height:1.6">` +
+            `<span style="color:${p.color}">● </span>` +
+            `${p.seriesName}: ${valStr} ${meta?.units ?? ''}` +
+            `</div>`
+        }
+        return html
+      },
     },
     xAxis: {
       type: 'category',
@@ -168,6 +236,8 @@ function updateChart() {
     yAxis: yAxes,
     series,
   }, true)
+  // resize after DOM updates modal width
+  nextTick(() => chart.value?.resize())
 }
 
 onMounted(async () => {
@@ -179,6 +249,20 @@ onMounted(async () => {
       const items = buildItems(mode)
       if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
     })
+    let outTimer: ReturnType<typeof setTimeout> | null = null
+    chart.value.on('mouseover', (params: any) => {
+      if (outTimer) { clearTimeout(outTimer); outTimer = null }
+      if (params.componentType === 'series') hoveredSeries.value = params.seriesName
+    })
+    chart.value.on('mouseout', (params: any) => {
+      if (params.componentType === 'series') {
+        outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
+      }
+    })
+    chart.value.on('globalout', () => {
+      if (outTimer) { clearTimeout(outTimer); outTimer = null }
+      hoveredSeries.value = null
+    })
     await loadActiveTab()
   }
 })
@@ -189,7 +273,7 @@ watch(() => timeStore.currentIndex, updateChart)
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
-    <div class="modal-box">
+    <div class="modal-box" :style="{ width: modalWidth + 'px' }">
       <div class="modal-head">
         <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
         <button class="modal-close" @click="emit('close')">✕</button>
@@ -203,17 +287,8 @@ watch(() => timeStore.currentIndex, updateChart)
           @click="activeTab = t.key"
         >{{ t.label }}</button>
 
-        <!-- Active var chips + add -->
+        <!-- Add button fixed on left, selected var chips grow to the right -->
         <div class="var-chips">
-          <span
-            v-for="vn in activeVars" :key="vn"
-            class="var-chip"
-            :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
-          >
-            {{ vn }}
-            <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
-          </span>
-
           <div class="dropdown-wrap" style="position: relative">
             <button class="add-var-btn" @click="varPickerOpen = !varPickerOpen">+ 添加变量</button>
             <div v-if="varPickerOpen" class="var-picker">
@@ -229,6 +304,15 @@ watch(() => timeStore.currentIndex, updateChart)
             </div>
             <div v-if="varPickerOpen" class="picker-backdrop" @click="varPickerOpen = false" />
           </div>
+
+          <span
+            v-for="vn in activeVars" :key="vn"
+            class="var-chip"
+            :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
+          >
+            {{ vn }}
+            <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
+          </span>
         </div>
       </div>
 
@@ -248,15 +332,17 @@ watch(() => timeStore.currentIndex, updateChart)
 .modal-box {
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 880px; max-width: calc(100vw - 32px);
+  /* width set dynamically via :style; hard limits prevent overflow */
+  min-width: 45rem;
+  max-width: calc(100vw - 2.5em);
   display: flex; flex-direction: column;
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
+  padding: 0.625em 1em; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
 }
-.modal-title { font-family: var(--font-mono); font-size: 12px; color: var(--fg-1); }
-.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+.modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); }
+.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
 
 .modal-tabs {
@@ -264,39 +350,39 @@ watch(() => timeStore.currentIndex, updateChart)
   border-bottom: 1px solid var(--line-1);
 }
 .tab-btn {
-  height: 36px; padding: 0 16px;
+  padding: 0.625em 1em;
   background: none; border: none; border-right: 1px solid var(--line-1);
-  color: var(--fg-3); font-size: 12px; cursor: pointer;
+  color: var(--fg-3); font-size: 0.75rem; cursor: pointer;
 }
 .tab-btn:hover { background: var(--bg-3); color: var(--fg-1); }
 .tab-btn.active { color: var(--accent); background: var(--accent-faint); }
 
-.var-chips { display: flex; align-items: center; gap: 4px; padding: 0 12px; flex: 1; flex-wrap: wrap; }
+.var-chips { display: flex; align-items: center; gap: 0.25em; padding: 0 0.75em; flex: 1; flex-wrap: wrap; }
 .var-chip {
-  display: flex; align-items: center; gap: 2px;
-  padding: 2px 6px; border: 1px solid; font-family: var(--font-mono); font-size: 10px; color: var(--fg-1);
+  display: flex; align-items: center; gap: 0.125em;
+  padding: 0.125em 0.375em; border: 1px solid; font-family: var(--font-mono); font-size: 0.625rem; color: var(--fg-1);
 }
-.chip-rm { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.chip-rm { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.6875rem; padding: 0 0.125em; }
 .add-var-btn {
-  height: 22px; padding: 0 8px; background: var(--bg-2); border: 1px solid var(--line-2);
-  color: var(--fg-2); font-size: 11px; cursor: pointer; white-space: nowrap;
+  padding: 0.25em 0.5em; background: var(--bg-2); border: 1px solid var(--line-2);
+  color: var(--fg-2); font-size: 0.6875rem; cursor: pointer; white-space: nowrap;
 }
 .add-var-btn:hover { background: var(--bg-3); color: var(--fg-0); }
 
 .var-picker {
   position: absolute; top: calc(100% + 4px); left: 0;
   z-index: 1300; background: var(--bg-1); border: 1px solid var(--line-3);
-  width: 200px; max-height: 280px; overflow-y: auto; padding: 4px 0;
+  width: 12.5rem; max-height: 17.5rem; overflow-y: auto; padding: 0.25em 0;
 }
 .picker-backdrop { position: fixed; inset: 0; z-index: 1299; }
-.picker-group { padding: 5px 10px 2px; font-size: 9px; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }
+.picker-group { padding: 0.3125em 0.625em 0.125em; font-size: 0.5625rem; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }
 .picker-item {
-  display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 10px;
-  background: none; border: none; color: var(--fg-1); font-size: 11px; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 0.375em; width: 100%; padding: 0.3125em 0.625em;
+  background: none; border: none; color: var(--fg-1); font-size: 0.6875rem; cursor: pointer; text-align: left;
 }
 .picker-item:hover:not(:disabled) { background: var(--bg-3); }
 .picker-item:disabled { opacity: 0.4; cursor: default; }
-.picker-name { color: var(--fg-3); font-size: 10px; }
+.picker-name { color: var(--fg-3); font-size: 0.625rem; }
 
-.chart-area { width: 100%; height: 420px; }
+.chart-area { width: 100%; height: 460px; }
 </style>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRegionLayer } from '@/composables/useRegionLayer'
+import { useRegionLayer, hoverInfo } from '@/composables/useRegionLayer'
 import { useGridLayer } from '@/composables/useGridLayer'
 import { useRegionStore } from '@/stores/region'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { VARS } from '@/config/vars'
 import Inspector from '@/components/panels/Inspector.vue'
+import Legend from '@/components/panels/Legend.vue'
+import RegionHistoryModal from '@/components/modals/RegionHistoryModal.vue'
 
 // Activate layers
 useRegionLayer()
@@ -18,7 +20,7 @@ const varStore    = useVarStore()
 
 const showHistory = ref(false)
 
-// ── Load stats on mount and when region/mode/var changes ──────────────────────
+// ── Load stats ────────────────────────────────────────────────────────────────
 
 async function maybeLoad() {
   await regionStore.loadRegions()
@@ -26,13 +28,9 @@ async function maybeLoad() {
 }
 
 onMounted(maybeLoad)
+watch([() => regionStore.selRegionId, () => timeStore.mode], maybeLoad)
 
-watch([
-  () => regionStore.selRegionId,
-  () => timeStore.mode,
-], maybeLoad)
-
-// ── Current value ──────────────────────────────────────────────────────────
+// ── Current value ─────────────────────────────────────────────────────────────
 
 const currentValue = computed(() =>
   regionStore.getValueAtIndex(
@@ -56,11 +54,21 @@ const frameLabel = computed(() => {
 </script>
 
 <template>
-  <!-- Right-side Inspector -->
-  <div class="region-right-stack">
+  <!-- Region hover tooltip -->
+  <div
+    v-if="hoverInfo"
+    class="region-hover-tip"
+    :style="{ left: hoverInfo.x + 14 + 'px', top: hoverInfo.y - 8 + 'px' }"
+  >
+    {{ hoverInfo.name }}
+  </div>
+
+  <!-- 右侧面板：Inspector（有选中区域时）+ Legend -->
+  <div class="right-panel">
     <Inspector
       v-if="regionStore.selRegion"
       mode="region"
+      :show-history="true"
       :region-name="regionStore.selRegion.name"
       :frame-label="frameLabel"
       :var-name="varStore.selVar"
@@ -69,44 +77,38 @@ const frameLabel = computed(() => {
       @clear="regionStore.selectRegion('xizang')"
       @history="showHistory = true"
     />
+    <Legend />
   </div>
 
-  <!-- F-16: HistoryModal placeholder -->
-  <div v-if="showHistory" class="history-backdrop" @click="showHistory = false">
-    <div class="history-stub" @click.stop>
-      <p style="color: var(--fg-1); font-family: var(--font-mono);">区域统计历史图表（F-16，待实现）</p>
-      <button style="color: var(--accent); background: none; border: none; cursor: pointer;" @click="showHistory = false">关闭</button>
-    </div>
-  </div>
+  <RegionHistoryModal
+    v-if="showHistory"
+    @close="showHistory = false"
+  />
 </template>
 
 <style scoped>
-.region-right-stack {
+.region-hover-tip {
   position: fixed;
-  right: 12px;
-  top: calc(var(--h-nav) + var(--h-sub) + 12px);
-  z-index: 600;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.history-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(7,9,12,0.6);
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.history-stub {
+  pointer-events: none;
+  z-index: 500;
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  padding: 40px 60px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-1);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.right-panel {
+  position: fixed;
+  right: 0.75rem;
+  bottom: calc(var(--h-bottom) + 0.75rem);
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  gap: 0.75rem;
+  pointer-events: auto;
 }
 </style>

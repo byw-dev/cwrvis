@@ -11,12 +11,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Only /api is proxied — grid/shapes use absolute URLs from VITE_GRID_BASE / VITE_SHAPES_BASE.
-      // When those env vars point to /grid or /shapes (offline dev), Vite serves from public/.
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/grid': { target: 'http://localhost:8000', changeOrigin: true },
+      '/shapes': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
   build: {

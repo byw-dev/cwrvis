@@ -1,15 +1,36 @@
-import { watch, onUnmounted } from 'vue'
-import type { ImageSource } from 'maplibre-gl'
+import { watch, shallowRef, onUnmounted } from 'vue'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
-import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
+import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
 import type { AggMode } from '@/types'
 
+type FrameData = { imageData: ImageData }
+
 const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/grid'
+
+// 每次帧渲染完毕（applyBitmap）时递增，供外部 watch 数据就绪
+const renderTick = shallowRef(0)
+
+// 模块级懒加载接口，供 HistoryModal 按需获取任意 var+mode 的帧数据
+export async function fetchGridFrames(
+  varName: string,
+  mode: AggMode,
+): Promise<(number | null)[][][] | null> {
+  const gran = GRAN_PATH[mode]
+  const key  = `${varName}_${gran}`
+  if (jsonCache.has(key)) return jsonCache.get(key)!
+  try {
+    const res = await fetch(`${GRID_BASE}/${gran}/${varName}.json`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json() as (number | null)[][][]
+    jsonCache.set(key, data)
+    return data
+  } catch { return null }
+}
 
 const GRAN_PATH: Record<AggMode, string> = {
   monthly:     'month',
@@ -22,7 +43,7 @@ const GRAN_PATH: Record<AggMode, string> = {
 // JSON cache: `{var}_{gran}` → all frames data
 const jsonCache = new Map<string, (number | null)[][][]>()
 
-// ── LRU ImageBitmap cache ─────────────────────────────────────────────────────
+// ── LRU frame cache ───────────────────────────────────────────────────────────
 
 class LruCache<V> {
   private map = new Map<string, V>()
@@ -34,22 +55,24 @@ class LruCache<V> {
     if (this.map.has(key)) this.map.delete(key)
     this.map.set(key, val)
     if (this.map.size > this.max) {
-      const oldest = this.map.keys().next().value
-      const evicted = this.map.get(oldest)
+      const oldest = this.map.keys().next().value!
       this.map.delete(oldest)
-      if (evicted instanceof ImageBitmap) evicted.close()
     }
   }
 
   has(key: string): boolean { return this.map.has(key) }
+
+  clear(): void {
+    this.map.clear()
+  }
 }
 
-const imageCache = new LruCache<ImageBitmap>(20)
+const imageCache = new LruCache<FrameData>(20)
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
 export function useGridLayer() {
-  const { map }     = useMap()
+  const { map, gridCanvas } = useMap()
   const timeStore   = useTimeStore()
   const varStore    = useVarStore()
   const settings    = useSettingsStore()
@@ -59,13 +82,13 @@ export function useGridLayer() {
     { type: 'module' },
   )
 
-  // Receive rendered ImageBitmap from Worker
+  // Receive rendered pixels from Worker
   worker.onmessage = (e: MessageEvent<RenderResponse>) => {
-    const { imageBitmap, frameKey } = e.data
-    imageCache.set(frameKey, imageBitmap)
-    // If this is still the frame we need, push to map
+    const { pixels, width, height, frameKey } = e.data
+    const frameData: FrameData = { imageData: new ImageData(new Uint8ClampedArray(pixels), width, height) }
+    imageCache.set(frameKey, frameData)
     if (frameKey === currentFrameKey()) {
-      applyBitmap(imageBitmap)
+      applyBitmap(frameData)
     }
   }
 
@@ -104,42 +127,45 @@ export function useGridLayer() {
     mode: AggMode,
     idx: number,
   ): void {
-    const meta   = VARS[varName as keyof typeof VARS]!
     const cmName = settings.getColormap(varName as any)
     const lut    = getLut(cmName)
+
+    // 逐帧从数据自动计算量程
+    let dataMin = Infinity, dataMax = -Infinity
+    for (const row of frame2d) {
+      for (const v of row) {
+        if (v === null) continue
+        if (v < dataMin) dataMin = v
+        if (v > dataMax) dataMax = v
+      }
+    }
+    if (!isFinite(dataMin)) { dataMin = 0; dataMax = 1 }  // 全缺测兜底
+
+    // 用户手动输入的一侧优先，另一侧用帧数据自动值
+    const vmin = varStore.threshMin ?? dataMin
+    const vmax = varStore.threshMax ?? dataMax
+
+    varStore.setRenderRange(vmin, vmax)
 
     const req: RenderRequest = {
       frame2d,
       lut,
-      vmin:      meta.vmin,
-      vmax:      meta.vmax,
-      threshMin: varStore.threshMin ?? meta.vmin,
-      threshMax: varStore.threshMax ?? meta.vmax,
-      targetW:   600,
-      targetH:   400,
-      frameKey:  frameKey(varName, mode, idx),
+      vmin,
+      vmax,
+      targetW:  600,
+      targetH:  400,
+      frameKey: frameKey(varName, mode, idx),
     }
     worker.postMessage(req)
   }
 
-  function applyBitmap(bmp: ImageBitmap): void {
-    const m = map.value
-    if (!m?.isStyleLoaded()) return
-    try {
-      const src = m.getSource('grid-overlay') as ImageSource | undefined
-      if (!src) return
-      const url = bitmapToObjectUrl(bmp)
-      src.updateImage({ url })
-    } catch { /* map not ready */ }
-  }
-
-  // ImageBitmap → object URL for MapLibre updateImage
-  function bitmapToObjectUrl(bmp: ImageBitmap): string {
-    const canvas = document.createElement('canvas')
-    canvas.width  = bmp.width
-    canvas.height = bmp.height
-    canvas.getContext('2d')!.drawImage(bmp, 0, 0)
-    return canvas.toDataURL()  // synchronous for small bitmaps
+  function applyBitmap(frame: FrameData): void {
+    const canvas = gridCanvas.value
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.putImageData(frame.imageData, 0, 0)
+    renderTick.value++
   }
 
   async function renderCurrent(): Promise<void> {
@@ -148,11 +174,9 @@ export function useGridLayer() {
     const idx     = timeStore.currentIndex
     const key     = frameKey(varName, mode, idx)
 
-    // Cache hit
     const cached = imageCache.get(key)
     if (cached) { applyBitmap(cached); preload(varName, mode, idx); return }
 
-    // Fetch JSON then render
     const data = await loadJson(varName, mode)
     if (!data) return
     const frame = data[idx]
@@ -175,21 +199,45 @@ export function useGridLayer() {
     }
   }
 
-  // Watch for state changes that require re-render
+  // 色卡/阈值变更：清缓存后重渲（bitmap 需用新配色重新生成）
   watch(
-    [
-      () => varStore.selVar,
-      () => timeStore.mode,
-      () => timeStore.currentIndex,
-      () => settings.colormaps,
-      () => varStore.threshMin,
-      () => varStore.threshMax,
-    ],
+    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax],
+    () => { imageCache.clear(); renderCurrent() },
+  )
+
+  // var/时间变更：直接重渲（缓存仍有效）
+  watch(
+    [() => varStore.selVar, () => timeStore.mode, () => timeStore.currentIndex],
     () => { renderCurrent() },
     { immediate: true },
   )
 
+  // Re-render when map becomes ready (handles race between data fetch and map init)
+  watch(
+    () => map.value,
+    (m) => {
+      if (!m) return
+      if (m.isStyleLoaded()) {
+        renderCurrent()
+      } else {
+        m.once('load', () => renderCurrent())
+      }
+    },
+  )
+
+  // 获取当前帧在 (lat, lon) 处的插值，供 hover/click 使用
+  function getValueAt(lat: number, lon: number): number | null {
+    const data = jsonCache.get(cacheKey(varStore.selVar, timeStore.mode))
+    const frame = data?.[timeStore.currentIndex]
+    return frame ? bilinearInterp(frame, lat, lon) : null
+  }
+
+  // 按需加载指定 var + mode 的帧数据，供 HistoryModal 使用
+  async function fetchFrames(varName: string, mode: AggMode): Promise<(number | null)[][][] | null> {
+    return loadJson(varName, mode)
+  }
+
   onUnmounted(() => { worker.terminate() })
 
-  return { renderCurrent }
+  return { renderCurrent, getValueAt, fetchFrames, renderTick }
 }

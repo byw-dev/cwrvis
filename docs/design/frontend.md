@@ -784,6 +784,42 @@ pnpm build           # 产物在 frontend/dist/
 
 ---
 
+## 技术决策记录（联调后补充）
+
+### Canvas 渲染方案：ImageBitmap → 原始像素 ArrayBuffer
+
+**背景**：Worker 初始实现使用 `OffscreenCanvas.transferToImageBitmap()` 生成 ImageBitmap，主线程用 `ctx.drawImage(bitmap)` 贴到 canvas，再由 MapLibre 的 CanvasSource 读取。
+
+**问题**：Chrome 对调用了 `drawImage(ImageBitmap)` 的 canvas 进行 GPU 加速后，`texImage2D(canvas)` 读到的 CPU buffer 为全零，导致模块切换后图层消失（格点色块变透明）。尝试 `willReadFrequently: true`、`play/pause`、`rAF` 等方案均无效。
+
+**决策**：Worker 直接传输原始 `Uint8ClampedArray.buffer`（Transferable，零拷贝），主线程用 `ctx.putImageData(new ImageData(pixels, w, h), 0, 0)` 写入。`putImageData` 是纯 CPU 操作，始终写入 CPU buffer，`texImage2D` 能可靠读取。
+
+**副作用**：无。Worker 侧还节省了 `createImageBitmap`（async）的开销，渲染延迟略有改善。
+
+**相关文件**：`frontend/src/workers/gridRenderer.worker.ts`、`frontend/src/composables/useGridLayer.ts`
+
+---
+
+### 格点图层色卡量程策略
+
+**规则**：
+1. **默认（用户未输入）**：每帧独立从当帧数据自动计算 min/max，映射到色卡全范围。颜色含义随帧变化，适合观察帧内相对分布。
+2. **用户覆盖**：在图例阈值输入框输入值后，该值优先于自动计算，且在同一 `var + 聚合模式` 下跨帧保留。
+3. **量程清除时机**：切换 var 或聚合模式时，阈值自动清空（不同模式量程差异大，不可复用）。
+4. **超出量程着色**：低于 vmin 按 vmin 的颜色渲染，高于 vmax 按 vmax 的颜色渲染（clamp），而非透明。只有真正的缺测格点（null）才渲染为透明。
+
+**相关文件**：`frontend/src/workers/gridRenderer.worker.ts`、`frontend/src/composables/useGridLayer.ts`、`frontend/src/components/panels/Legend.vue`
+
+---
+
+### CSS 单位规范
+
+见独立文档：`docs/design/css-units.md`
+
+全站以 `rem` 为主要字号和布局尺寸单位，组件内间距用 `em`，物理像素语义明确时（细线、ECharts 画布高度）保留 `px`。
+
+---
+
 ## 性能目标
 
 | 指标 | 目标值 |

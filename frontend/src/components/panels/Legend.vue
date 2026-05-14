@@ -2,26 +2,41 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
+import { useTimeStore } from '@/stores/time'
 import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
 import type { ColormapName } from '@/types'
 
-const varStore = useVarStore()
-const settings = useSettingsStore()
+const varStore  = useVarStore()
+const settings  = useSettingsStore()
+const timeStore = useTimeStore()
 
 const CMAPS: ColormapName[] = ['turbo', 'viridis', 'magma', 'cyan', 'rdbu']
 
 const vm      = computed(() => VARS[varStore.selVar])
 const cmName  = computed(() => settings.getColormap(varStore.selVar))
+// 优先显示实际渲染量程，若尚未计算则回退配置占位值
+const displayVmin = computed(() => varStore.renderRange?.vmin ?? vm.value.vmin)
+const displayVmax = computed(() => varStore.renderRange?.vmax ?? vm.value.vmax)
+const displayMid  = computed(() => ((displayVmin.value + displayVmax.value) / 2))
 
 // Threshold inputs
 const threshMinInput = ref<string>('')
 const threshMaxInput = ref<string>('')
 
-watch(() => varStore.selVar, () => {
+// var 或聚合模式变更时清空阈值（不同模式量程差异大，不能复用）
+watch([() => varStore.selVar, () => timeStore.mode], () => {
   threshMinInput.value = ''
   threshMaxInput.value = ''
+  varStore.clearThresh()
 }, { immediate: true })
+
+function fmtThreshVal(s: string): string {
+  if (s === '') return ''
+  const n = parseFloat(s)
+  if (isNaN(n)) return s
+  return Math.abs(n) >= 1e4 ? n.toExponential(2) : String(n)
+}
 
 function applyThresh() {
   const mn = threshMinInput.value === '' ? null : parseFloat(threshMinInput.value)
@@ -30,6 +45,8 @@ function applyThresh() {
     mn !== null && !isNaN(mn) ? mn : null,
     mx !== null && !isNaN(mx) ? mx : null,
   )
+  threshMinInput.value = fmtThreshVal(threshMinInput.value)
+  threshMaxInput.value = fmtThreshVal(threshMaxInput.value)
 }
 
 function clearThresh() {
@@ -84,9 +101,9 @@ watch([cmName, () => varStore.selVar], drawGradient)
     <div class="ramp-wrap">
       <canvas ref="canvasRef" class="ramp-canvas" width="220" height="12" />
       <div class="ramp-ticks">
-        <span>{{ vm.vmin }}</span>
-        <span>{{ ((vm.vmin + vm.vmax) / 2).toFixed(0) }}</span>
-        <span>{{ vm.vmax }}</span>
+        <span>{{ displayVmin.toPrecision(3) }}</span>
+        <span>{{ displayMid.toPrecision(3) }}</span>
+        <span>{{ displayVmax.toPrecision(3) }}</span>
       </div>
     </div>
 
@@ -109,7 +126,8 @@ watch([cmName, () => varStore.selVar], drawGradient)
         v-model="threshMinInput"
         class="thresh-input"
         placeholder="最小值"
-        type="number"
+        type="text"
+        inputmode="decimal"
         @change="applyThresh"
       />
       <span class="thresh-sep">–</span>
@@ -117,7 +135,8 @@ watch([cmName, () => varStore.selVar], drawGradient)
         v-model="threshMaxInput"
         class="thresh-input"
         placeholder="最大值"
-        type="number"
+        type="text"
+        inputmode="decimal"
         @change="applyThresh"
       />
       <button
@@ -134,32 +153,32 @@ watch([cmName, () => varStore.selVar], drawGradient)
 .legend-panel {
   background: var(--bg-1);
   border: 1px solid var(--line-2);
-  padding: 10px 12px;
-  width: 248px;
+  padding: 0.625em 0.75em;
+  width: 15.5rem;
 }
 
 .legend-header {
   display: flex;
-  gap: 6px;
+  gap: 0.375em;
   align-items: baseline;
-  margin-bottom: 2px;
+  margin-bottom: 0.125em;
 }
-.var-code { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
-.var-name { font-size: 12px; color: var(--fg-1); }
-.legend-unit { font-size: 10px; color: var(--fg-3); margin-bottom: 8px; font-family: var(--font-mono); }
+.var-code { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--accent); }
+.var-name { font-size: 0.75rem; color: var(--fg-1); }
+.legend-unit { font-size: 0.625rem; color: var(--fg-3); margin-bottom: 0.5em; font-family: var(--font-mono); }
 
-.ramp-wrap { margin-bottom: 4px; }
+.ramp-wrap { margin-bottom: 0.25em; }
 .ramp-canvas { width: 100%; height: 12px; display: block; }
 .ramp-ticks {
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: var(--fg-3);
-  margin-top: 2px;
+  margin-top: 0.125em;
 }
 
-.cm-selector { display: flex; gap: 3px; margin-bottom: 8px; }
+.cm-selector { display: flex; gap: 0.1875em; margin-bottom: 0.5em; }
 .cm-swatch {
   padding: 0;
   background: none;
@@ -172,7 +191,7 @@ watch([cmName, () => varStore.selVar], drawGradient)
 .thresh-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25em;
 }
 .thresh-input {
   flex: 1;
@@ -180,20 +199,20 @@ watch([cmName, () => varStore.selVar], drawGradient)
   border: 1px solid var(--line-2);
   color: var(--fg-0);
   font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 6px;
+  font-size: 0.6875rem;
+  padding: 0.1875em 0.375em;
   width: 0;
   outline: none;
 }
 .thresh-input:focus { border-color: var(--accent-dim); }
-.thresh-sep { font-size: 11px; color: var(--fg-3); }
+.thresh-sep { font-size: 0.6875rem; color: var(--fg-3); }
 .thresh-clear {
   background: none;
   border: none;
   color: var(--fg-3);
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 0.6875rem;
+  padding: 0.125em 0.25em;
 }
 .thresh-clear:hover { color: var(--fg-0); }
 </style>
