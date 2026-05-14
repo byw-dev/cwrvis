@@ -9,6 +9,7 @@
 
 VERSION      ?= 0.1.0
 NC_DIR       ?= data/nc
+CSV_DIR      ?= data/csv
 SHAPE_DIR    ?= data/shapes
 METHOD       ?= area_weighted
 NODE_VERSION := $(shell cat .nvmrc 2>/dev/null || echo lts/*)
@@ -17,7 +18,7 @@ DIST_DIR     := dist/cwrvis-$(VERSION)
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 
-.PHONY: all data data-grid data-sqlite shapes frontend dev package clean help
+.PHONY: all data data-grid data-sqlite data-sqlite-csv shapes frontend dev package clean help
 
 # ---------------------------------------------------------------------------- #
 # 默认目标                                                                       #
@@ -36,12 +37,17 @@ data-grid:  ## netcdf → 格点 JSON（static/grid/）
 		--nc-dir $(NC_DIR) \
 		--out-dir static/grid
 
-data-sqlite:  ## netcdf × shapes → 区域统计 SQLite（db/stats.db）；METHOD= 可覆盖算法
+data-sqlite:  ## 路径 A：netcdf × shapes → 区域统计 SQLite（db/stats.db）；METHOD= 可覆盖算法
 	uv run python scripts/netcdf_to_sqlite.py \
 		--nc-dir $(NC_DIR) \
 		--shape-dir $(SHAPE_DIR) \
 		--db-path db/stats.db \
 		--method $(METHOD)
+
+data-sqlite-csv:  ## 路径 B：预计算 CSV → 区域统计 SQLite（db/stats.db）；需要 data/csv/ 就绪
+	uv run python scripts/csv_to_sqlite.py \
+		--csv-dir $(CSV_DIR) \
+		--db-path db/stats.db
 
 shapes:  ## data/shapes/ 中文名 → static/shapes/ region_id 命名
 	mkdir -p static/shapes
@@ -132,8 +138,9 @@ help:  ## 显示此帮助
 	@echo "Data generation:"
 	@echo "  make data                    全部离线数据（grid + sqlite + shapes）"
 	@echo "  make data-grid               格点 JSON        →  static/grid/"
-	@echo "  make data-sqlite             区域统计 SQLite  →  db/stats.db"
+	@echo "  make data-sqlite             路径 A: netcdf 聚合 → db/stats.db"
 	@echo "  make data-sqlite METHOD=point_in_boundary"
+	@echo "  make data-sqlite-csv         路径 B: CSV 导入   → db/stats.db"
 	@echo "  make shapes                  GeoJSON 重命名   →  static/shapes/"
 	@echo ""
 	@echo "Frontend:"
