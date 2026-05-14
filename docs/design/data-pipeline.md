@@ -142,10 +142,10 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 
 ```bash
 # 默认路径（nc-dir=data/nc，out-dir=static/grid）—— 从项目根运行
-uv run python scripts/netcdf_to_json.py
+uv run --project scripts python scripts/netcdf_to_json.py
 
 # 显式指定
-uv run python scripts/netcdf_to_json.py \
+uv run --project scripts python scripts/netcdf_to_json.py \
   --nc-dir data/nc \
   --out-dir static/grid
 ```
@@ -293,13 +293,13 @@ GROUP BY season;
 
 ```bash
 # 默认方法（area_weighted）
-uv run python scripts/netcdf_to_sqlite.py \
+uv run --project scripts python scripts/netcdf_to_sqlite.py \
   --nc-dir data/nc \
   --shape-dir data/shapes \
   --db-path db/stats.db
 
 # 切换方法
-uv run python scripts/netcdf_to_sqlite.py \
+uv run --project scripts python scripts/netcdf_to_sqlite.py \
   --nc-dir data/nc \
   --shape-dir data/shapes \
   --db-path db/stats_pointin.db \
@@ -356,10 +356,10 @@ data/csv/
 
 ```bash
 # 默认路径（csv-dir=data/csv，db-path=db/stats.db）—— 从项目根运行
-uv run python scripts/csv_to_sqlite.py
+uv run --project scripts python scripts/csv_to_sqlite.py
 
 # 显式指定
-uv run python scripts/csv_to_sqlite.py \
+uv run --project scripts python scripts/csv_to_sqlite.py \
   --csv-dir data/csv \
   --db-path db/stats.db
 ```

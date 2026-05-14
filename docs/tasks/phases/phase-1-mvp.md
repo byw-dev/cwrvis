@@ -118,6 +118,12 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - region_id 映射见 `backend/config.py` 的 `REGION_MAP`
   - 实现为 Makefile `shapes` target，集成到打包流程（D-01 依赖此项）
 
+- [x] `DONE` **S-05** `[S]` scripts Python 环境管理（`scripts/pyproject.toml` + `make setup`）
+  - 新增 `scripts/pyproject.toml`，声明数据处理依赖（numpy / xarray / netCDF4 / shapely）
+  - Makefile：`data-grid` / `data-sqlite` / `data-sqlite-csv` 改用 `uv run --project scripts`；新增 `setup` target 一键初始化所有环境
+  - CLAUDE.md 更新 Python 环境管理说明，反映两套独立 venv 的事实
+  - `← needs: S-04`
+
 - [x] `DONE` **S-04** `[M]` 根目录 Makefile（项目全流程构建脚本）
   - Targets（见 data-pipeline.md "项目构建脚本"节）：
     - `data-sqlite`：运行 S-02 脚本（支持 `METHOD=` 变量覆盖，默认 `area_weighted`）
@@ -351,10 +357,10 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
-| S 脚本 | 4 | 4 | 0 | 0 | 0 |
+| S 脚本 | 5 | 5 | 0 | 0 | 0 |
 | B 后端 | 4 | 4 | 0 | 0 | 0 |
 | F 前端 | 19 | 19 | 0 | 0 | 0 |
 | D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **30** | **27** | **0** | **3** | **0** |
+| **合计** | **31** | **28** | **0** | **3** | **0** |
 
 **预估剩余工时**（单人）：约 2–4 天（仅剩 D 系列 3 项部署任务）

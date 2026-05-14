@@ -3,7 +3,11 @@
 #
 # 从项目根目录运行：make <target> [VAR=value ...]
 #
-# Python:  所有命令通过 uv run 执行（.venv 由 uv 管理）
+# 首次 clone 后运行：make setup（初始化所有 Python / Node.js 环境）
+#
+# Python 环境（两套，互相独立）：
+#   backend/.venv  ← cd backend && uv sync（FastAPI 运行时）
+#   scripts/.venv  ← cd scripts && uv sync（数据预生成脚本）
 # Node.js: 所有命令通过 pnpm 执行（corepack 管理版本，首次需 corepack enable）
 # ==============================================================================
 
@@ -18,7 +22,7 @@ DIST_DIR     := dist/cwrvis-$(VERSION)
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 
-.PHONY: all data data-grid data-sqlite data-sqlite-csv shapes frontend dev package clean help
+.PHONY: all setup data data-grid data-sqlite data-sqlite-csv shapes frontend dev package clean help
 
 # ---------------------------------------------------------------------------- #
 # 默认目标                                                                       #
@@ -27,25 +31,38 @@ NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 all: data shapes frontend  ## 生成全部离线数据 + 编译前端
 
 # ---------------------------------------------------------------------------- #
+# 初始化开发环境（首次 clone 后运行）                                             #
+# ---------------------------------------------------------------------------- #
+
+setup:  ## 初始化所有开发环境（首次 clone 后运行一次即可）
+	@echo "==> [1/3] backend Python 环境（FastAPI 运行时）"
+	cd backend && uv sync
+	@echo "==> [2/3] scripts Python 环境（数据预生成脚本）"
+	cd scripts && uv sync
+	@echo "==> [3/3] frontend Node.js 环境"
+	bash -c '$(NVM_INIT) && cd frontend && pnpm install'
+	@echo "==> 完成。运行 'make dev' 启动开发服务器，'make data' 生成离线数据。"
+
+# ---------------------------------------------------------------------------- #
 # 数据生成                                                                       #
 # ---------------------------------------------------------------------------- #
 
 data: data-grid data-sqlite shapes  ## 全部离线数据（grid + sqlite + shapes）
 
 data-grid:  ## netcdf → 格点 JSON（static/grid/）
-	uv run python scripts/netcdf_to_json.py \
+	uv run --project scripts python scripts/netcdf_to_json.py \
 		--nc-dir $(NC_DIR) \
 		--out-dir static/grid
 
 data-sqlite:  ## 路径 A：netcdf × shapes → 区域统计 SQLite（db/stats.db）；METHOD= 可覆盖算法
-	uv run python scripts/netcdf_to_sqlite.py \
+	uv run --project scripts python scripts/netcdf_to_sqlite.py \
 		--nc-dir $(NC_DIR) \
 		--shape-dir $(SHAPE_DIR) \
 		--db-path db/stats.db \
 		--method $(METHOD)
 
 data-sqlite-csv:  ## 路径 B：预计算 CSV → 区域统计 SQLite（db/stats.db）；需要 data/csv/ 就绪
-	uv run python scripts/csv_to_sqlite.py \
+	uv run --project scripts python scripts/csv_to_sqlite.py \
 		--csv-dir $(CSV_DIR) \
 		--db-path db/stats.db
 
@@ -134,6 +151,9 @@ clean:  ## 删除全部生成文件（static/grid shapes web，db/，dist/）
 help:  ## 显示此帮助
 	@echo ""
 	@echo "Usage: make <target> [VAR=value ...]"
+	@echo ""
+	@echo "Setup (run once after git clone):"
+	@echo "  make setup                   初始化所有开发环境（backend + scripts + frontend）"
 	@echo ""
 	@echo "Data generation:"
 	@echo "  make data                    全部离线数据（grid + sqlite + shapes）"

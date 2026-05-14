@@ -1,0 +1,11 @@
+[project]
+name = "cwrvis-scripts"
+version = "0.1.0"
+description = "cwrvis 离线数据预生成脚本（格点 JSON、区域统计 SQLite）"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "xarray>=2024.0",
+    "netCDF4>=1.6",   # xarray 读取 .nc 文件所需的后端
+    "shapely>=2.0",
+]

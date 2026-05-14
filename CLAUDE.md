@@ -308,20 +308,33 @@ fix/*         问题修复
 
 ### Python 环境管理（强制约束）
 
-**禁止直接使用 `python3` / `pip` 命令操作系统 Python 环境。** 所有 Python 依赖安装和脚本执行必须通过 `uv` 管理：
+**禁止直接使用 `python3` / `pip` 命令操作系统 Python 环境。** 所有 Python 依赖安装和脚本执行必须通过 `uv` 管理。
+
+项目有**两套独立的 Python 环境**，各有自己的 `pyproject.toml` 和 `.venv`：
+
+| 环境 | 位置 | 用途 | 依赖 |
+|------|------|------|------|
+| 后端运行时 | `backend/` | FastAPI / uvicorn 服务 | `backend/pyproject.toml` |
+| 数据处理脚本 | `scripts/` | 离线预生成数据 | `scripts/pyproject.toml` |
 
 ```bash
-# 创建虚拟环境（仅首次）
-uv venv .venv
+# 首次 clone 后，一键初始化所有环境（推荐）
+make setup
 
-# 安装依赖
-uv pip install xarray netCDF4 geopandas ...
+# 或手动分别初始化：
+cd backend && uv sync   # 创建 backend/.venv
+cd scripts && uv sync   # 创建 scripts/.venv
 
-# 执行脚本
-uv run python scripts/netcdf_to_json.py
+# 执行数据处理脚本（通过 Makefile，自动使用 scripts/.venv）
+make data-grid
+make data-sqlite-csv
 
-# 或激活后执行
-source .venv/bin/activate && python scripts/...
+# 直接调用（需从项目根运行）
+uv run --project scripts python scripts/netcdf_to_json.py
+uv run --project scripts python scripts/csv_to_sqlite.py --csv-dir data/csv --db-path db/stats.db
+
+# 启动后端开发服务器（使用 backend/.venv）
+cd backend && uv run uvicorn main:app --reload --port 8000
 ```
 
 违反此约定会污染系统 Python 环境，Agent 不得以任何理由跳过。
