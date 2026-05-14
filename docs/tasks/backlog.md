@@ -20,7 +20,11 @@
 - Web Worker 改为 SharedArrayBuffer + 零拷贝传输（需 COOP/COEP header）
 - 格点 JSON 改为 MessagePack 二进制格式（减小体积约 30%）
 - 区域统计数据考虑一次性全量加载（当前是按 region + var 懒加载）
-- ECharts 实例复用（当前每次打开 Modal 重建）
+- ECharts 实例复用（当前每次打开 Modal 通过 v-if 重建，可改为 v-show + resize）
+- CSS rem/em 迁移：CategoryFlyout.vue 等第三波未覆盖的组件仍有 px 值，可后续补全（优先级低，不影响功能）
+- 格点图层"跨帧可比较"模式：当前为逐帧自动量程，若需要观察绝对值变化趋势，可增加"全序列统一量程"选项
+- 区域历史弹窗 Y 轴最多支持 3 根右轴（% / day / hour），超出时共用最右侧轴；若未来新增量纲需重新评估
+- HistoryModal（格点）目前不支持多 var 对比，仅展示单点时序；可考虑参照 RegionHistoryModal 支持多 var
 
 ## 待确认
 
