@@ -107,7 +107,7 @@ function buildOption() {
   const markLine = markIdx !== null ? {
     silent: true,
     symbol: 'none',
-    lineStyle: { color: '#ffba49', width: 1.5, type: 'solid' },
+    lineStyle: { color: '#ffba49', width: 1.5, type: 'dashed' },
     label: { formatter: '{b}', color: '#ffba49', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
     data: [{ xAxis: markIdx, name: labels[markIdx] ?? String(markIdx) }],
   } : undefined
