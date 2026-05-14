@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, shallowRef } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
+import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, GraphicComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
@@ -12,7 +12,7 @@ import { fetchGridFrames } from '@/composables/useGridLayer'
 import { bilinearInterp } from '@/utils/grid'
 import type { AggMode, VarName } from '@/types'
 
-echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
+echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, GraphicComponent, CanvasRenderer])
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -103,11 +103,13 @@ function buildOption() {
   const meta  = VARS[props.varName ?? varStore.selVar]
   const isLoading = tabLoading.value[activeTab.value]
 
-  const markLine = currentMarkLine.value !== null ? {
+  const markIdx = currentMarkLine.value
+  const markLine = markIdx !== null ? {
     silent: true,
     symbol: 'none',
     lineStyle: { color: '#ffba49', width: 1.5, type: 'solid' },
-    data: [{ xAxis: currentMarkLine.value }],
+    label: { formatter: '{b}', color: '#ffba49', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+    data: [{ xAxis: markIdx, name: labels[markIdx] ?? String(markIdx) }],
   } : undefined
 
   return {
@@ -117,7 +119,7 @@ function buildOption() {
       left: 'center', top: 'middle',
       style: { text: '加载中…', fill: '#54606f', fontSize: 13, fontFamily: 'JetBrains Mono, monospace' },
     }] : [],
-    grid: { top: 28, right: 20, bottom: 48, left: 60, containLabel: false },
+    grid: { top: 28, right: 20, bottom: 48, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
@@ -142,7 +144,10 @@ function buildOption() {
       type: 'value',
       axisLine: { show: false },
       splitLine: { lineStyle: { color: '#1f2a37' } },
-      axisLabel: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      axisLabel: {
+        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+        formatter: (v: number) => v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v),
+      },
     },
     series: [{
       type: 'line', data: values,

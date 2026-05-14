@@ -124,7 +124,8 @@ function updateChart() {
         silent: true,
         symbol: 'none',
         lineStyle: { color: '#ffba49', width: 1.5 },
-        data: [{ xAxis: markIdx }],
+        label: { formatter: '{b}', color: '#ffba49', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+        data: [{ xAxis: markIdx, name: labels[markIdx] ?? String(markIdx) }],
       } : undefined,
     }
   })
@@ -136,7 +137,10 @@ function updateChart() {
       position: i === 0 ? 'left' : 'right',
       axisLine: { show: false },
       splitLine: i === 0 ? { lineStyle: { color: '#1f2a37' } } : { show: false },
-      axisLabel: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      axisLabel: {
+        color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace',
+        formatter: (v: number) => v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v),
+      },
     } as any)
   })
 
@@ -147,12 +151,29 @@ function updateChart() {
       textStyle: { color: '#b6c2d2', fontSize: 10 },
       inactiveColor: '#3b4a5e',
     },
-    grid: { top: 32, right: unitsSeen.length > 1 ? 60 : 20, bottom: 48, left: 60 },
+    grid: { top: 32, right: unitsSeen.length > 1 ? 60 : 20, bottom: 48, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
       borderColor: '#2a3645',
       textStyle: { color: '#b6c2d2', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+      formatter: (params: any[]) => {
+        if (!params.length) return ''
+        let html = `${params[0].axisValue}<br/>`
+        for (const p of params) {
+          const meta = VARS[p.seriesName as VarName]
+          const val = p.value
+          let valStr: string
+          if (val === null || val === undefined) {
+            valStr = 'N/D'
+          } else {
+            const num = Number(val)
+            valStr = Math.abs(num) >= 1e6 ? num.toExponential(3) : num.toPrecision(4)
+          }
+          html += `<span style="color:${p.color}">● </span>${p.seriesName}: ${valStr} ${meta?.units ?? ''}<br/>`
+        }
+        return html
+      },
     },
     xAxis: {
       type: 'category',
