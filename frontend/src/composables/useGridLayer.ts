@@ -3,7 +3,6 @@ import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
-import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
 import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
@@ -128,25 +127,23 @@ export function useGridLayer() {
     mode: AggMode,
     idx: number,
   ): void {
-    const meta   = VARS[varName as keyof typeof VARS]!
     const cmName = settings.getColormap(varName as any)
     const lut    = getLut(cmName)
 
-    // 若配置的 vmin/vmax 是占位值（量程内无任何数据点），则从帧数据自动计算
-    let vmin = meta.vmin
-    let vmax = meta.vmax
-    const hasDataInRange = frame2d.some(row => row.some(v => v !== null && v > vmin && v < vmax))
-    if (!hasDataInRange) {
-      let dataMin = Infinity, dataMax = -Infinity
-      for (const row of frame2d) {
-        for (const v of row) {
-          if (v === null) continue
-          if (v < dataMin) dataMin = v
-          if (v > dataMax) dataMax = v
-        }
+    // 逐帧从数据自动计算量程
+    let dataMin = Infinity, dataMax = -Infinity
+    for (const row of frame2d) {
+      for (const v of row) {
+        if (v === null) continue
+        if (v < dataMin) dataMin = v
+        if (v > dataMax) dataMax = v
       }
-      if (dataMin <= dataMax) { vmin = dataMin; vmax = dataMax }
     }
+    if (!isFinite(dataMin)) { dataMin = 0; dataMax = 1 }  // 全缺测兜底
+
+    // 用户手动输入的一侧优先，另一侧用帧数据自动值
+    const vmin = varStore.threshMin ?? dataMin
+    const vmax = varStore.threshMax ?? dataMax
 
     varStore.setRenderRange(vmin, vmax)
 
@@ -155,11 +152,9 @@ export function useGridLayer() {
       lut,
       vmin,
       vmax,
-      threshMin: varStore.threshMin ?? vmin,
-      threshMax: varStore.threshMax ?? vmax,
-      targetW:   600,
-      targetH:   400,
-      frameKey:  frameKey(varName, mode, idx),
+      targetW:  600,
+      targetH:  400,
+      frameKey: frameKey(varName, mode, idx),
     }
     worker.postMessage(req)
   }

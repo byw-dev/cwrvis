@@ -2,12 +2,14 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
+import { useTimeStore } from '@/stores/time'
 import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
 import type { ColormapName } from '@/types'
 
-const varStore = useVarStore()
-const settings = useSettingsStore()
+const varStore  = useVarStore()
+const settings  = useSettingsStore()
+const timeStore = useTimeStore()
 
 const CMAPS: ColormapName[] = ['turbo', 'viridis', 'magma', 'cyan', 'rdbu']
 
@@ -22,9 +24,11 @@ const displayMid  = computed(() => ((displayVmin.value + displayVmax.value) / 2)
 const threshMinInput = ref<string>('')
 const threshMaxInput = ref<string>('')
 
-watch(() => varStore.selVar, () => {
+// var 或聚合模式变更时清空阈值（不同模式量程差异大，不能复用）
+watch([() => varStore.selVar, () => timeStore.mode], () => {
   threshMinInput.value = ''
   threshMaxInput.value = ''
+  varStore.clearThresh()
 }, { immediate: true })
 
 function fmtThreshVal(s: string): string {

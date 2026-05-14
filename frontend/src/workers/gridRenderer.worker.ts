@@ -4,11 +4,9 @@
 
 export interface RenderRequest {
   frame2d: (number | null)[][]  // shape: (nLat, nLon)，行北→南，列西→东
-  lut: Uint8ClampedArray        // 256 * 4 bytes，RGBA，主线程预计算，按 var 的 vmin/vmax 建立
-  vmin: number                  // var 自然量程下限（与 LUT 对应）
-  vmax: number                  // var 自然量程上限（与 LUT 对应）
-  threshMin: number             // 阈值过滤下限（低于此值 → alpha=0）
-  threshMax: number             // 阈值过滤上限（高于此值 → alpha=0）
+  lut: Uint8ClampedArray        // 256 * 4 bytes，RGBA，主线程预计算
+  vmin: number                  // 色卡下限（帧数据自动或用户覆盖）
+  vmax: number                  // 色卡上限（帧数据自动或用户覆盖）
   targetW: number               // 目标画布宽度（像素）
   targetH: number               // 目标画布高度（像素）
   frameKey: string              // 主线程传入，原样回传，用于缓存匹配
@@ -24,7 +22,7 @@ export interface RenderResponse {
 // ─── Worker 主逻辑 ────────────────────────────────────────────────────────────
 
 self.onmessage = (e: MessageEvent<RenderRequest>) => {
-  const { frame2d, lut, vmin, vmax, threshMin, threshMax, targetW, targetH, frameKey } = e.data
+  const { frame2d, lut, vmin, vmax, targetW, targetH, frameKey } = e.data
 
   const nLat = frame2d.length
   const nLon = frame2d[0]?.length ?? 0
@@ -66,14 +64,14 @@ self.onmessage = (e: MessageEvent<RenderRequest>) => {
 
       const pidx = (py * targetW + px) * 4
 
+      // 缺测格点保持透明
       if (wSum === 0) { pixels[pidx + 3] = 0; continue }
 
-      const value = vSum / wSum
-
-      if (value < threshMin || value > threshMax) { pixels[pidx + 3] = 0; continue }
-
-      const lutIdx = vRange > 0
-        ? Math.max(0, Math.min(255, Math.round(((value - vmin) / vRange) * 255)))
+      // 超出量程 → clamp 到边界色，不透明
+      const value   = vSum / wSum
+      const clamped = vRange > 0 ? Math.max(vmin, Math.min(vmax, value)) : vmin
+      const lutIdx  = vRange > 0
+        ? Math.max(0, Math.min(255, Math.round(((clamped - vmin) / vRange) * 255)))
         : 0
       const base = lutIdx * 4
 
