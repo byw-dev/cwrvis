@@ -138,32 +138,32 @@ watch([cmName, () => varStore.selVar], drawGradient)
 .legend-panel {
   background: var(--bg-1);
   border: 1px solid var(--line-2);
-  padding: 10px 12px;
-  width: 248px;
+  padding: 0.625em 0.75em;
+  width: 15.5rem;
 }
 
 .legend-header {
   display: flex;
-  gap: 6px;
+  gap: 0.375em;
   align-items: baseline;
-  margin-bottom: 2px;
+  margin-bottom: 0.125em;
 }
-.var-code { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
-.var-name { font-size: 12px; color: var(--fg-1); }
-.legend-unit { font-size: 10px; color: var(--fg-3); margin-bottom: 8px; font-family: var(--font-mono); }
+.var-code { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--accent); }
+.var-name { font-size: 0.75rem; color: var(--fg-1); }
+.legend-unit { font-size: 0.625rem; color: var(--fg-3); margin-bottom: 0.5em; font-family: var(--font-mono); }
 
-.ramp-wrap { margin-bottom: 4px; }
+.ramp-wrap { margin-bottom: 0.25em; }
 .ramp-canvas { width: 100%; height: 12px; display: block; }
 .ramp-ticks {
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: var(--fg-3);
-  margin-top: 2px;
+  margin-top: 0.125em;
 }
 
-.cm-selector { display: flex; gap: 3px; margin-bottom: 8px; }
+.cm-selector { display: flex; gap: 0.1875em; margin-bottom: 0.5em; }
 .cm-swatch {
   padding: 0;
   background: none;
@@ -176,7 +176,7 @@ watch([cmName, () => varStore.selVar], drawGradient)
 .thresh-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25em;
 }
 .thresh-input {
   flex: 1;
@@ -184,20 +184,20 @@ watch([cmName, () => varStore.selVar], drawGradient)
   border: 1px solid var(--line-2);
   color: var(--fg-0);
   font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 6px;
+  font-size: 0.6875rem;
+  padding: 0.1875em 0.375em;
   width: 0;
   outline: none;
 }
 .thresh-input:focus { border-color: var(--accent-dim); }
-.thresh-sep { font-size: 11px; color: var(--fg-3); }
+.thresh-sep { font-size: 0.6875rem; color: var(--fg-3); }
 .thresh-clear {
   background: none;
   border: none;
   color: var(--fg-3);
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
+  font-size: 0.6875rem;
+  padding: 0.125em 0.25em;
 }
 .thresh-clear:hover { color: var(--fg-0); }
 </style>

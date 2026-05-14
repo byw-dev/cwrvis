@@ -62,56 +62,56 @@ const coordLabel = computed(() =>
 .inspector-panel {
   background: var(--bg-1);
   border: 1px solid var(--line-2);
-  width: 248px;
+  width: 15.5rem;
   font-family: var(--font-ui);
 }
 
 .insp-header {
   background: var(--bg-2);
   border-bottom: 1px solid var(--line-1);
-  padding: 4px 10px;
+  padding: 0.25em 0.625em;
 }
 .coord {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-2);
 }
 
 .insp-meta {
   display: flex;
   justify-content: space-between;
-  padding: 3px 10px;
+  padding: 0.1875em 0.625em;
   border-bottom: 1px solid var(--line-1);
 }
 .meta-item {
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-3);
   font-family: var(--font-mono);
 }
 
 .insp-value {
-  padding: 8px 10px 6px;
+  padding: 0.5em 0.625em 0.375em;
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 0.3125em;
 }
-.big-val  { font-family: var(--font-mono); font-size: 18px; color: var(--accent); font-weight: 700; }
-.no-val   { font-family: var(--font-mono); font-size: 14px; color: var(--fg-3); }
-.big-unit { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
+.big-val  { font-family: var(--font-mono); font-size: 1.125rem; color: var(--accent); font-weight: 700; }
+.no-val   { font-family: var(--font-mono); font-size: 0.875rem; color: var(--fg-3); }
+.big-unit { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--fg-3); }
 
 .insp-actions {
   display: flex;
-  gap: 6px;
-  padding: 6px 10px 8px;
+  gap: 0.375em;
+  padding: 0.375em 0.625em 0.5em;
   border-top: 1px solid var(--line-1);
 }
 .insp-btn {
   flex: 1;
-  height: 24px;
+  padding: 0.3em 0;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: 0.6875rem;
   cursor: pointer;
 }
 .insp-btn:hover { background: var(--bg-3); color: var(--fg-0); }

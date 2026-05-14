@@ -35,7 +35,7 @@ defineProps<{
   z-index: 500;
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 190px;
+  width: 12rem;
   font-family: var(--font-ui);
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
@@ -43,33 +43,33 @@ defineProps<{
 .ht-header {
   background: var(--bg-2);
   border-bottom: 1px solid var(--line-1);
-  padding: 4px 8px;
+  padding: 0.25em 0.5em;
 }
 .coord {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-2);
 }
 
 .ht-meta {
   display: flex;
   justify-content: space-between;
-  padding: 3px 8px;
+  padding: 0.1875em 0.5em;
   border-bottom: 1px solid var(--line-1);
 }
 .ht-label {
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-3);
   font-family: var(--font-mono);
 }
 
 .ht-value {
-  padding: 5px 8px;
+  padding: 0.3125em 0.5em;
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 0.25em;
 }
-.val  { font-family: var(--font-mono); font-size: 16px; color: var(--accent); font-weight: 600; }
-.nd   { font-family: var(--font-mono); font-size: 13px; color: var(--fg-3); }
-.unit { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); }
+.val  { font-family: var(--font-mono); font-size: 1rem; color: var(--accent); font-weight: 600; }
+.nd   { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--fg-3); }
+.unit { font-family: var(--font-mono); font-size: 0.625rem; color: var(--fg-3); }
 </style>

@@ -333,16 +333,16 @@ watch(() => timeStore.currentIndex, updateChart)
   background: var(--bg-1);
   border: 1px solid var(--line-3);
   /* width set dynamically via :style; hard limits prevent overflow */
-  min-width: 720px;
-  max-width: calc(100vw - 40px);
+  min-width: 45rem;
+  max-width: calc(100vw - 2.5em);
   display: flex; flex-direction: column;
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
+  padding: 0.625em 1em; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
 }
-.modal-title { font-family: var(--font-mono); font-size: 12px; color: var(--fg-1); }
-.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+.modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); }
+.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
 
 .modal-tabs {
@@ -350,39 +350,39 @@ watch(() => timeStore.currentIndex, updateChart)
   border-bottom: 1px solid var(--line-1);
 }
 .tab-btn {
-  height: 36px; padding: 0 16px;
+  padding: 0.625em 1em;
   background: none; border: none; border-right: 1px solid var(--line-1);
-  color: var(--fg-3); font-size: 12px; cursor: pointer;
+  color: var(--fg-3); font-size: 0.75rem; cursor: pointer;
 }
 .tab-btn:hover { background: var(--bg-3); color: var(--fg-1); }
 .tab-btn.active { color: var(--accent); background: var(--accent-faint); }
 
-.var-chips { display: flex; align-items: center; gap: 4px; padding: 0 12px; flex: 1; flex-wrap: wrap; }
+.var-chips { display: flex; align-items: center; gap: 0.25em; padding: 0 0.75em; flex: 1; flex-wrap: wrap; }
 .var-chip {
-  display: flex; align-items: center; gap: 2px;
-  padding: 2px 6px; border: 1px solid; font-family: var(--font-mono); font-size: 10px; color: var(--fg-1);
+  display: flex; align-items: center; gap: 0.125em;
+  padding: 0.125em 0.375em; border: 1px solid; font-family: var(--font-mono); font-size: 0.625rem; color: var(--fg-1);
 }
-.chip-rm { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.chip-rm { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.6875rem; padding: 0 0.125em; }
 .add-var-btn {
-  height: 22px; padding: 0 8px; background: var(--bg-2); border: 1px solid var(--line-2);
-  color: var(--fg-2); font-size: 11px; cursor: pointer; white-space: nowrap;
+  padding: 0.25em 0.5em; background: var(--bg-2); border: 1px solid var(--line-2);
+  color: var(--fg-2); font-size: 0.6875rem; cursor: pointer; white-space: nowrap;
 }
 .add-var-btn:hover { background: var(--bg-3); color: var(--fg-0); }
 
 .var-picker {
   position: absolute; top: calc(100% + 4px); left: 0;
   z-index: 1300; background: var(--bg-1); border: 1px solid var(--line-3);
-  width: 200px; max-height: 280px; overflow-y: auto; padding: 4px 0;
+  width: 12.5rem; max-height: 17.5rem; overflow-y: auto; padding: 0.25em 0;
 }
 .picker-backdrop { position: fixed; inset: 0; z-index: 1299; }
-.picker-group { padding: 5px 10px 2px; font-size: 9px; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }
+.picker-group { padding: 0.3125em 0.625em 0.125em; font-size: 0.5625rem; color: var(--fg-3); letter-spacing: 0.1em; text-transform: uppercase; }
 .picker-item {
-  display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 10px;
-  background: none; border: none; color: var(--fg-1); font-size: 11px; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 0.375em; width: 100%; padding: 0.3125em 0.625em;
+  background: none; border: none; color: var(--fg-1); font-size: 0.6875rem; cursor: pointer; text-align: left;
 }
 .picker-item:hover:not(:disabled) { background: var(--bg-3); }
 .picker-item:disabled { opacity: 0.4; cursor: default; }
-.picker-name { color: var(--fg-3); font-size: 10px; }
+.picker-name { color: var(--fg-3); font-size: 0.625rem; }
 
 .chart-area { width: 100%; height: 460px; }
 </style>

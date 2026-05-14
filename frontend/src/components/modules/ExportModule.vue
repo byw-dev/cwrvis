@@ -107,32 +107,32 @@ async function download() {
 .export-card {
   background: var(--bg-1);
   border: 1px solid var(--line-2);
-  padding: 40px 48px;
-  width: 360px;
+  padding: 2.5em 3em;
+  width: 22.5rem;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 1em;
 }
 
 .export-title {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
   letter-spacing: 0.08em;
   color: var(--fg-1);
   text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 0.25em;
 }
 
 .form-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75em;
 }
 
 .form-label {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--fg-2);
-  width: 40px;
+  width: 2.5rem;
   flex-shrink: 0;
 }
 
@@ -142,36 +142,36 @@ async function download() {
   border: 1px solid var(--line-2);
   color: var(--fg-0);
   font-family: var(--font-ui);
-  font-size: 12px;
-  padding: 5px 8px;
+  font-size: 0.75rem;
+  padding: 0.3125em 0.5em;
   outline: none;
 }
 .form-select:focus { border-color: var(--accent-dim); }
 
 .download-btn {
-  height: 36px;
+  padding: 0.5em;
   background: var(--bg-2);
   border: 1px solid var(--accent-dim);
   color: var(--accent);
-  font-size: 13px;
+  font-size: 0.8125rem;
   cursor: pointer;
   letter-spacing: 0.04em;
-  margin-top: 4px;
+  margin-top: 0.25em;
 }
 .download-btn:hover:not(:disabled) { background: var(--accent-faint); }
 .download-btn:disabled { opacity: 0.5; cursor: default; }
 
 .export-error {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--warn);
   font-family: var(--font-mono);
 }
 
 .export-note {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--fg-3);
   line-height: 1.6;
   border-top: 1px solid var(--line-1);
-  padding-top: 12px;
+  padding-top: 0.75em;
 }
 </style>

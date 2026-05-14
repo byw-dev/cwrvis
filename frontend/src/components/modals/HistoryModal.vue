@@ -225,8 +225,8 @@ watch(() => timeStore.currentIndex, updateChart)
 .modal-box {
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 880px;
-  max-width: calc(100vw - 32px);
+  width: 55rem;
+  max-width: calc(100vw - 2em);
   display: flex;
   flex-direction: column;
 }
@@ -234,22 +234,22 @@ watch(() => timeStore.currentIndex, updateChart)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 0.625em 1em;
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-2);
 }
-.modal-title { font-family: var(--font-mono); font-size: 12px; color: var(--fg-1); letter-spacing: 0.04em; }
-.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 12px; padding: 2px 6px; }
+.modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); letter-spacing: 0.04em; }
+.modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
 .modal-tabs { display: flex; border-bottom: 1px solid var(--line-1); }
 .tab-btn {
-  height: 36px; padding: 0 16px; background: none; border: none;
-  border-right: 1px solid var(--line-1); color: var(--fg-3); font-size: 12px;
-  cursor: pointer; display: flex; align-items: center; gap: 6px;
+  padding: 0.625em 1em; background: none; border: none;
+  border-right: 1px solid var(--line-1); color: var(--fg-3); font-size: 0.75rem;
+  cursor: pointer; display: flex; align-items: center; gap: 0.375em;
 }
 .tab-btn:hover { background: var(--bg-3); color: var(--fg-1); }
 .tab-btn.active { color: var(--accent); background: var(--accent-faint); }
-.tab-frames { font-size: 9px; color: var(--fg-3); font-family: var(--font-mono); }
-.tab-loading { font-size: 9px; color: var(--accent); }
+.tab-frames { font-size: 0.5625rem; color: var(--fg-3); font-family: var(--font-mono); }
+.tab-loading { font-size: 0.5625rem; color: var(--accent); }
 .chart-area { width: 100%; height: 420px; }
 </style>

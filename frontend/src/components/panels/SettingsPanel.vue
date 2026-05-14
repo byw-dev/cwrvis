@@ -73,7 +73,7 @@ const settings = useSettingsStore()
 }
 
 .settings-panel {
-  width: 300px;
+  width: 18.75rem;
   background: var(--bg-1);
   border-left: 1px solid var(--line-2);
   height: calc(100vh - var(--h-nav));
@@ -85,14 +85,14 @@ const settings = useSettingsStore()
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 0.75em 1em;
   border-bottom: 1px solid var(--line-1);
   background: var(--bg-2);
 }
 
 .settings-title {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   color: var(--fg-1);
   text-transform: uppercase;
@@ -103,43 +103,43 @@ const settings = useSettingsStore()
   border: none;
   color: var(--fg-3);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 6px;
+  font-size: 0.75rem;
+  padding: 0.125em 0.375em;
 }
 .settings-close:hover { color: var(--fg-0); }
 
 .settings-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 1em;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 1.25em;
 }
 
 .settings-section {}
 
 .section-label {
-  font-size: 10px;
+  font-size: 0.625rem;
   letter-spacing: 0.08em;
   color: var(--fg-3);
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 0.5em;
   font-family: var(--font-mono);
 }
 
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125em;
 }
 
 .radio-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  font-size: 12px;
+  gap: 0.5em;
+  padding: 0.375em 0.5em;
+  font-size: 0.75rem;
   color: var(--fg-2);
   cursor: pointer;
   border: 1px solid transparent;
@@ -149,17 +149,17 @@ const settings = useSettingsStore()
 .radio-item.active { color: var(--fg-0); border-color: var(--line-2); background: var(--bg-2); }
 
 .settings-foot {
-  padding: 16px;
+  padding: 1em;
   border-top: 1px solid var(--line-1);
 }
 
 .reset-btn {
   width: 100%;
-  height: 32px;
+  padding: 0.5em;
   background: var(--bg-2);
   border: 1px solid var(--line-2);
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 .reset-btn:hover { background: var(--bg-3); color: var(--warn); border-color: var(--warn); }
