@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, shallowRef } from 'vue'
+import { ref, computed, watch, onMounted, shallowRef, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
@@ -35,6 +35,13 @@ const chartEl = ref<HTMLDivElement>()
 const chart   = shallowRef<echarts.ECharts | null>(null)
 
 const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
+
+// px per right Y-axis: tick labels (non-kg ≤ 4 chars at fontSize 9 ≈ 28px) + axis + padding
+const AXIS_W = 58
+
+const rightAxisCount = ref(0)
+// modal width grows with each additional right axis; capped by viewport
+const modalWidth = computed(() => Math.min(1280, 800 + rightAxisCount.value * AXIS_W))
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -113,19 +120,19 @@ function updateChart() {
     v !== 0 && Math.abs(v) >= 1e6 ? v.toExponential(2) : String(v)
 
   const rightCount = unitsOrdered.length - 1
-  const gridRight  = rightCount === 0 ? 20 : 24 + rightCount * 70
+  rightAxisCount.value = rightCount
+  const gridRight = rightCount === 0 ? 20 : 20 + rightCount * AXIS_W
 
   const yAxes = unitsOrdered.map((unit, i) => {
     const isLeft = i === 0
     return {
       type: 'value',
       name: unit,
-      nameLocation: 'middle',
-      nameRotate: isLeft ? 90 : -90,
-      nameGap: isLeft ? 60 : 32,
+      nameLocation: 'end',   // unit label sits just above the topmost tick
+      nameGap: 6,
       nameTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
       position: isLeft ? 'left' : 'right',
-      offset: isLeft ? undefined : (i - 1) * 70,
+      offset: isLeft ? undefined : (i - 1) * AXIS_W,
       axisLine: { show: false },
       splitLine: isLeft ? { lineStyle: { color: '#1f2a37' } } : { show: false },
       axisLabel: {
@@ -163,11 +170,18 @@ function updateChart() {
   chart.value.setOption({
     backgroundColor: 'transparent',
     legend: {
-      top: 4, right: 16,
-      textStyle: { color: '#b6c2d2', fontSize: 10 },
+      type: 'scroll',
+      bottom: 4,
+      left: 'center',
+      orient: 'horizontal',
+      itemWidth: 14,
+      itemHeight: 8,
+      textStyle: { color: '#b6c2d2', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' },
       inactiveColor: '#3b4a5e',
+      pageIconColor: '#58e0ff',
+      pageTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
     },
-    grid: { top: 36, right: gridRight, bottom: 48, left: 8, containLabel: true },
+    grid: { top: 24, right: gridRight, bottom: 60, left: 8, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(13,17,23,0.9)',
@@ -205,6 +219,8 @@ function updateChart() {
     yAxis: yAxes,
     series,
   }, true)
+  // resize after DOM updates modal width
+  nextTick(() => chart.value?.resize())
 }
 
 onMounted(async () => {
@@ -226,7 +242,7 @@ watch(() => timeStore.currentIndex, updateChart)
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
-    <div class="modal-box">
+    <div class="modal-box" :style="{ width: modalWidth + 'px' }">
       <div class="modal-head">
         <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
         <button class="modal-close" @click="emit('close')">✕</button>
@@ -285,7 +301,9 @@ watch(() => timeStore.currentIndex, updateChart)
 .modal-box {
   background: var(--bg-1);
   border: 1px solid var(--line-3);
-  width: 1040px; max-width: calc(100vw - 32px);
+  /* width set dynamically via :style; hard limits prevent overflow */
+  min-width: 720px;
+  max-width: calc(100vw - 40px);
   display: flex; flex-direction: column;
 }
 .modal-head {
@@ -335,5 +353,5 @@ watch(() => timeStore.currentIndex, updateChart)
 .picker-item:disabled { opacity: 0.4; cursor: default; }
 .picker-name { color: var(--fg-3); font-size: 10px; }
 
-.chart-area { width: 100%; height: 500px; }
+.chart-area { width: 100%; height: 460px; }
 </style>
