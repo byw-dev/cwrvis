@@ -41,7 +41,8 @@ const LINE_TYPES    = ['solid', 'dashed', 'dotted'] as const
 // px per right Y-axis: tick labels (non-kg ≤ 4 chars at fontSize 9 ≈ 28px) + axis + padding
 const AXIS_W = 58
 
-const rightAxisCount = ref(0)
+const rightAxisCount  = ref(0)
+const hoveredSeries   = ref<string | null>(null)
 // modal width grows with each additional right axis; capped by viewport
 const modalWidth = computed(() => Math.min(1280, 800 + rightAxisCount.value * AXIS_W))
 
@@ -202,18 +203,21 @@ function updateChart() {
       textStyle: { color: '#b6c2d2', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
       formatter: (params: any[]) => {
         if (!params.length) return ''
-        let html = `${params[0].axisValue}<br/>`
+        const active = hoveredSeries.value
+        let html = `<div style="margin-bottom:4px;color:#b6c2d2">${params[0].axisValue}</div>`
         for (const p of params) {
-          const meta = VARS[p.seriesName as VarName]
-          const val = p.value
-          let valStr: string
-          if (val === null || val === undefined) {
-            valStr = 'N/D'
-          } else {
-            const num = Number(val)
-            valStr = Math.abs(num) >= 1e6 ? num.toExponential(3) : num.toPrecision(4)
-          }
-          html += `<span style="color:${p.color}">● </span>${p.seriesName}: ${valStr} ${meta?.units ?? ''}<br/>`
+          const meta   = VARS[p.seriesName as VarName]
+          const val    = p.value
+          const valStr = val === null || val === undefined ? 'N/D'
+            : Math.abs(Number(val)) >= 1e6 ? Number(val).toExponential(3)
+            : Number(val).toPrecision(4)
+          const isActive = !active || p.seriesName === active
+          const fg     = isActive ? '#e8f4ff' : '#3a4d62'
+          const weight = isActive ? '600' : '400'
+          html += `<div style="color:${fg};font-weight:${weight};line-height:1.6">` +
+            `<span style="color:${p.color}">● </span>` +
+            `${p.seriesName}: ${valStr} ${meta?.units ?? ''}` +
+            `</div>`
         }
         return html
       },
@@ -245,6 +249,10 @@ onMounted(async () => {
       const items = buildItems(mode)
       if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
     })
+    chart.value.on('mouseover', (params: any) => {
+      if (params.componentType === 'series') hoveredSeries.value = params.seriesName
+    })
+    chart.value.on('globalout', () => { hoveredSeries.value = null })
     await loadActiveTab()
   }
 })
