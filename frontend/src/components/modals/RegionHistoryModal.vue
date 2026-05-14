@@ -151,7 +151,7 @@ function updateChart() {
   const series = activeVars.value.map((vn, i) => {
     const color    = SERIES_COLORS[i % SERIES_COLORS.length]
     const symbol   = SYMBOLS[i % SYMBOLS.length]
-    const lineType = LINE_TYPES[Math.floor(i / SYMBOLS.length) % LINE_TYPES.length]
+    const lineType = LINE_TYPES[i % LINE_TYPES.length]
     const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
     const data = rows.map(r => {
       const v = r[vn as string]
