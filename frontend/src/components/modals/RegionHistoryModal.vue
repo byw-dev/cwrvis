@@ -35,6 +35,8 @@ const chartEl = ref<HTMLDivElement>()
 const chart   = shallowRef<echarts.ECharts | null>(null)
 
 const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
+const SYMBOLS       = ['circle', 'rect', 'triangle', 'diamond', 'roundRect'] as const
+const LINE_TYPES    = ['solid', 'dashed', 'dotted'] as const
 
 // px per right Y-axis: tick labels (non-kg ≤ 4 chars at fontSize 9 ≈ 28px) + axis + padding
 const AXIS_W = 58
@@ -143,7 +145,13 @@ function updateChart() {
   })
 
   // ── Series ─────────────────────────────────────────────────────────────
+  // monthly has 312 dense points — symbols clutter the line; show them for other modes
+  const showSymbol = mode !== 'monthly'
+
   const series = activeVars.value.map((vn, i) => {
+    const color    = SERIES_COLORS[i % SERIES_COLORS.length]
+    const symbol   = SYMBOLS[i % SYMBOLS.length]
+    const lineType = LINE_TYPES[Math.floor(i / SYMBOLS.length) % LINE_TYPES.length]
     const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
     const data = rows.map(r => {
       const v = r[vn as string]
@@ -154,9 +162,14 @@ function updateChart() {
       name: vn,
       data,
       yAxisIndex: unitToAxisIdx.get(VARS[vn].units) ?? 0,
-      lineStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length], width: 1.5 },
-      itemStyle: { color: SERIES_COLORS[i % SERIES_COLORS.length] },
-      symbol: 'none',
+      symbol,
+      symbolSize: 5,
+      showSymbol,
+      lineStyle: { color, width: 1.5, type: lineType },
+      itemStyle: { color },
+      // hover: highlight this series, fade all others
+      emphasis: { focus: 'series', lineStyle: { width: 2.5 } },
+      blur:     { lineStyle: { opacity: 0.15 }, itemStyle: { opacity: 0.15 } },
       markLine: markIdx !== null && i === 0 ? {
         silent: true,
         symbol: 'none',
@@ -256,17 +269,8 @@ watch(() => timeStore.currentIndex, updateChart)
           @click="activeTab = t.key"
         >{{ t.label }}</button>
 
-        <!-- Active var chips + add -->
+        <!-- Add button fixed on left, selected var chips grow to the right -->
         <div class="var-chips">
-          <span
-            v-for="vn in activeVars" :key="vn"
-            class="var-chip"
-            :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
-          >
-            {{ vn }}
-            <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
-          </span>
-
           <div class="dropdown-wrap" style="position: relative">
             <button class="add-var-btn" @click="varPickerOpen = !varPickerOpen">+ 添加变量</button>
             <div v-if="varPickerOpen" class="var-picker">
@@ -282,6 +286,15 @@ watch(() => timeStore.currentIndex, updateChart)
             </div>
             <div v-if="varPickerOpen" class="picker-backdrop" @click="varPickerOpen = false" />
           </div>
+
+          <span
+            v-for="vn in activeVars" :key="vn"
+            class="var-chip"
+            :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
+          >
+            {{ vn }}
+            <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
+          </span>
         </div>
       </div>
 
