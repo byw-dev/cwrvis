@@ -249,10 +249,20 @@ onMounted(async () => {
       const items = buildItems(mode)
       if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
     })
+    let outTimer: ReturnType<typeof setTimeout> | null = null
     chart.value.on('mouseover', (params: any) => {
+      if (outTimer) { clearTimeout(outTimer); outTimer = null }
       if (params.componentType === 'series') hoveredSeries.value = params.seriesName
     })
-    chart.value.on('globalout', () => { hoveredSeries.value = null })
+    chart.value.on('mouseout', (params: any) => {
+      if (params.componentType === 'series') {
+        outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
+      }
+    })
+    chart.value.on('globalout', () => {
+      if (outTimer) { clearTimeout(outTimer); outTimer = null }
+      hoveredSeries.value = null
+    })
     await loadActiveTab()
   }
 })
