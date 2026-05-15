@@ -95,3 +95,4 @@ db/
 
 # 分发压缩包
 dist/
+backend/build_info.json

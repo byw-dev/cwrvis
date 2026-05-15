@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from config import settings
-from routers import stats, report, meta
+from routers import stats, report, meta, version
 
 app = FastAPI(title="cwrvis", docs_url="/api/docs", redoc_url=None)
 
@@ -27,9 +27,10 @@ def health():
     return {"ok": True}
 
 
-app.include_router(stats.router, prefix="/api/v1")
-app.include_router(report.router, prefix="/api/v1")
-app.include_router(meta.router, prefix="/api/v1")
+app.include_router(stats.router,   prefix="/api/v1")
+app.include_router(report.router,  prefix="/api/v1")
+app.include_router(meta.router,    prefix="/api/v1")
+app.include_router(version.router, prefix="/api/v1")
 
 # 静态文件挂载（/ 必须最后挂载）
 _s = Path(settings.static_root)

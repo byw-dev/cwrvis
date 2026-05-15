@@ -1,10 +1,37 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { BASEMAP_LIST } from '@/config/basemaps'
 
 defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
+
+interface BuildInfo {
+  version: string
+  commit: string
+  dirty: boolean
+  branch: string
+  build_time: string
+}
+
+const buildInfo = ref<BuildInfo | null>(null)
+
+onMounted(async () => {
+  try {
+    const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
+    const res = await fetch(`${base}/version`)
+    if (res.ok) {
+      const body = await res.json()
+      buildInfo.value = body.data as BuildInfo
+    }
+  } catch { /* 版本信息获取失败时静默处理 */ }
+})
+
+function fmtTime(iso: string): string {
+  try { return new Date(iso).toLocaleString('zh-CN', { hour12: false }) }
+  catch { return iso }
+}
 </script>
 
 <template>
@@ -53,6 +80,11 @@ const settings = useSettingsStore()
       </div>
 
       <div class="settings-foot">
+        <div v-if="buildInfo" class="build-info">
+          <span class="bi-version">{{ buildInfo.version }}</span>
+          <span v-if="buildInfo.dirty" class="bi-dirty">未提交改动</span>
+          <span class="bi-time">{{ fmtTime(buildInfo.build_time) }}</span>
+        </div>
         <button class="reset-btn" @click="settings.resetAll()">恢复默认值</button>
       </div>
     </div>
@@ -149,8 +181,35 @@ const settings = useSettingsStore()
 .radio-item.active { color: var(--fg-0); border-color: var(--line-2); background: var(--bg-2); }
 
 .settings-foot {
-  padding: 1em;
+  padding: 0.75em 1em 1em;
   border-top: 1px solid var(--line-1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.625em;
+}
+
+.build-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125em;
+  padding: 0.375em 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.bi-version {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+}
+.bi-dirty {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--warn);
+}
+.bi-time {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--fg-3);
 }
 
 .reset-btn {

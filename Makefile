@@ -89,6 +89,7 @@ frontend:  ## 编译前端，产物输出至 static/web/
 # ---------------------------------------------------------------------------- #
 
 dev:  ## 同时启动 FastAPI(:8000) 和 Vite(:5173)，Ctrl+C 一并退出
+	@VERSION=$(VERSION) bash scripts/gen_build_info.sh
 	@echo "Starting backend :8000 + frontend :5173  (Ctrl+C to stop both)"
 	@trap 'kill %1 %2 2>/dev/null; exit 0' INT TERM; \
 	 (cd backend && uv run uvicorn main:app --reload --port 8000) & \
@@ -103,6 +104,9 @@ package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz（前置
 	@echo "==> Assembling $(DIST_DIR)  (version=$(VERSION))"
 	rm -rf $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/bin $(DIST_DIR)/logs $(DIST_DIR)/conf
+
+	# 生成版本信息（写入 backend/build_info.json，rsync 时一并打入包）
+	VERSION=$(VERSION) bash scripts/gen_build_info.sh
 
 	# 后端源码 → app/（排除 .venv、__pycache__）
 	rsync -a \

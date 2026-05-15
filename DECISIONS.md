@@ -184,3 +184,27 @@
 **背景**：15×25=375 格点的双线性插值到 600×400 像素约需 10–50ms，在主线程执行会阻塞 UI。  
 **原因**：Worker 与主线程并行；ImageBitmap Transferable 零拷贝；MapLibre ImageSource 原地替换无闪烁。  
 **代价**：Worker 无法访问 DOM；Worker 初始化有一次性开销（<5ms）。
+
+---
+
+## 部署与运维
+
+### DEC-016：构建时写入版本信息，后端接口暴露，设置面板展示
+
+**状态**：Active  
+**决策**：
+1. `scripts/gen_build_info.sh` 在 `make package` 和 `make dev` 时执行，将 git 状态写入 `backend/build_info.json`（生成文件，不入版本库）
+2. 版本字符串规则：无未提交改动 → `{VERSION}-{short_commit}`；有改动 → `{VERSION}-{short_commit}-dev`
+3. 后端在 `GET /api/v1/version` 接口读取并返回该文件；文件缺失时返回默认 `"dev"` 值
+4. 前端在设置面板底部展示版本字符串和构建时间
+
+**背景**：MVP 阶段无 git tag，需要在不引入 SemVer 管理成本的前提下实现版本可追溯。  
+**原因**：
+- 构建时（非运行时）确定版本信息：前后端拿到同一份数据，无竞态
+- `make dev` 同样生成，确保开发态与生产态行为一致
+- 生产服务器不需要安装 git（文件由构建机生成后打入包中）
+- 独立 `/api/v1/version` 接口：不污染 `/health`（health check 应保持轻量）
+
+**代价**：每次 `make dev` 写一次磁盘（可忽略）；版本号仍需手动 bump（未来采用 git tag + `git describe` 后可自动化）。
+
+**未来演进路径**：采用 git tag 后，`gen_build_info.sh` 改用 `git describe --tags --always --dirty` 自动推导版本，`VERSION` Makefile 变量变为可选覆盖。
