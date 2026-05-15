@@ -43,7 +43,7 @@ chore(scope): 描述    # 配置 / 文案 / 非功能改动
 2. **任务登记**：
    - 若关联现有任务：在 `active.md` 标注，无需新建条目
    - 若独立改进：在 `phase-N.md` 新增任务条目，写入 `active.md`
-3. **建分支**（本地，按需可推远端）：
+3. **建分支**（本地临时分支，不推远端）：
 
 ```bash
 git checkout -b enhance/short-name
@@ -69,11 +69,10 @@ git branch -d enhance/short-name
 1. **问答确认**：功能范围、涉及模块、验收条件
 2. **设计先行**：若涉及接口或架构变更，先更新 `docs/design/` 相关文档，做一次 docs commit
 3. **任务登记**：在 `phase-N.md` 新增带编号的任务条目（`F-XX` / `B-XX` / `S-XX`），写入 `active.md`
-4. **建分支**（推送到远端）：
+4. **建分支**（本地临时分支，不推远端）：
 
 ```bash
 git checkout -b feature/short-name
-git push -u origin feature/short-name   # 可协作、可备份
 ```
 
 5. **实现**：多次 `wip:` 提交
@@ -85,7 +84,6 @@ git commit -m "feat(scope): 描述（新增功能）"
 git rebase dev
 git checkout dev && git merge --ff-only feature/short-name
 git branch -d feature/short-name
-git push origin --delete feature/short-name   # 清理远端
 ```
 
 7. **更新任务状态**为 DONE
@@ -94,12 +92,14 @@ git push origin --delete feature/short-name   # 清理远端
 
 ## 汇总
 
-| 类型 | 分支 | 推送远端 | commit 前缀 | 任务登记 |
-|------|------|----------|-------------|----------|
-| Tweak | ——（直接 dev） | — | `style` / `chore` | 不需要 |
-| Enhancement | `enhance/name` | 可选 | `feat` | 视情况 |
-| Feature | `feature/name` | ✅ | `feat` | 必须 |
-| Bug | `fix/BUG-XX` | ❌ | `fix` | open→close |
+| 类型 | 分支 | commit 前缀 | 任务登记 |
+|------|------|-------------|----------|
+| Tweak | ——（直接 dev） | `style` / `chore` | 不需要 |
+| Enhancement | `enhance/name` | `feat` | 视情况 |
+| Feature | `feature/name` | `feat` | 必须 |
+| Bug | `fix/BUG-XX` | `fix` | open→close |
+
+> **所有分支均为本地临时分支，不推送到远端。** `dev` 分支由用户决定何时 push。
 
 ---
 
@@ -120,12 +120,10 @@ git branch -d enhance/region-hover-value
 
 # Feature
 git checkout -b feature/export-png
-git push -u origin feature/export-png
 # ...wip commits...
 git reset --soft $(git merge-base HEAD dev)
 git commit -m "feat(frontend): 格点帧导出 PNG"
 git rebase dev && git checkout dev
 git merge --ff-only feature/export-png
 git branch -d feature/export-png
-git push origin --delete feature/export-png
 ```

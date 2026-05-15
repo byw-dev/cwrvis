@@ -197,7 +197,7 @@ pnpm install      # corepack 自动使用 package.json 中声明的版本
    - **Bug**（原本正常、现在不符合设计）→ `docs/tasks/BUG-WORKFLOW.md`
    - **Tweak**（改颜色/文案/间距等微调，< 半天）→ 直接在 `dev` 实现
    - **Enhancement**（改进已有功能，架构不变）→ `enhance/` 分支
-   - **Feature**（新增此前不存在的功能）→ `feature/` 分支
+   - **Feature**（新增此前不存在的功能）→ `feature/` 本地分支
    - 执行前须**向用户说明分类及理由**（一句话），用户可纠正
    - Enhancement / Feature 完整流程见 `docs/tasks/FEATURE-WORKFLOW.md`
 
