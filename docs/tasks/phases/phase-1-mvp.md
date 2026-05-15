@@ -334,12 +334,14 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 ## D — Deploy / 部署与运维
 
-- [ ] `TODO` **D-01** `[M]` 分发包结构与打包脚本
+- [x] `DONE` **D-01** `[M]` 分发包结构与打包脚本
   - 目录：`cwrvis-{version}/bin/`、`app/`、`static/{grid,web,shapes,reports}/`、`db/`、`conf/`、`logs/`
-  - `bin/start.sh`：检查 `.venv`，`source conf/config.env`，启动 uvicorn（2 workers）
-  - `bin/stop.sh`：`pkill -f uvicorn`（或读 PID 文件 graceful stop）
-  - 打包通过根目录 `Makefile` 的 `make package` target 完成（见 S-04）
-  - `← needs: S-03, S-04, B-01~B-04, F-01~F-19`
+  - **离线部署**：`make package` 在打包时以 `uv pip download --platform manylinux_2_17_x86_64` 预取 Linux wheel 缓存，嵌入 `app/wheels/` + `app/requirements.txt`；支持在 macOS 构建、Linux 离线运行
+  - `bin/start.sh`：首次启动自动建 venv——有 `wheels/` 则离线安装，否则在线 fallback；后续启动直接复用已有 venv
+  - `bin/stop.sh`：读 PID 文件 graceful stop
+  - `conf/config.env.example`：环境变量模板，打包时复制到 `conf/config.env`
+  - 打包通过根目录 `Makefile` 的 `make package` target 完成（前置：`make setup`）
+  - `← needs: S-03, S-04, S-05, B-01~B-04, F-01~F-19`
 
 - [ ] `TODO` **D-02** `[S]` systemd service 配置
   - `deploy/systemd/cwrvis.service`：`WorkingDirectory`、`ExecStart`（绝对路径 `bin/start.sh`）、`Restart=on-failure`、`RestartSec=5`
@@ -360,7 +362,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 | S 脚本 | 5 | 5 | 0 | 0 | 0 |
 | B 后端 | 4 | 4 | 0 | 0 | 0 |
 | F 前端 | 19 | 19 | 0 | 0 | 0 |
-| D 部署 | 3 | 0 | 0 | 3 | 0 |
-| **合计** | **31** | **28** | **0** | **3** | **0** |
+| D 部署 | 3 | 1 | 0 | 2 | 0 |
+| **合计** | **31** | **29** | **0** | **2** | **0** |
 
 **预估剩余工时**（单人）：约 2–4 天（仅剩 D 系列 3 项部署任务）

@@ -99,7 +99,7 @@ dev:  ## 同时启动 FastAPI(:8000) 和 Vite(:5173)，Ctrl+C 一并退出
 # 打包                                                                           #
 # ---------------------------------------------------------------------------- #
 
-package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz
+package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz（前置：make setup）
 	@echo "==> Assembling $(DIST_DIR)  (version=$(VERSION))"
 	rm -rf $(DIST_DIR)
 	mkdir -p $(DIST_DIR)/bin $(DIST_DIR)/logs $(DIST_DIR)/conf
@@ -112,6 +112,28 @@ package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz
 		--exclude='*.pyo' \
 		backend/ $(DIST_DIR)/app/
 
+	# 导出锁定依赖清单（两份）：
+	#   requirements.txt     带 hash，供目标机离线安装时完整性校验
+	#   /tmp/req-plain.txt   无 hash，供 pip download 跨平台解析（hash 会干扰）
+	(cd backend && uv export --frozen --no-dev --format requirements-txt) \
+		> $(DIST_DIR)/app/requirements.txt
+	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) \
+		> /tmp/cwrvis-req-plain.txt
+
+	# 预取 Linux x86_64 wheel 缓存（支持在 macOS 构建、Linux 离线运行）
+	# 目标平台：glibc≥2.28（Ubuntu 20.04+）
+	uv venv /tmp/cwrvis-pip-env --seed --clear -q
+	/tmp/cwrvis-pip-env/bin/pip install --upgrade pip --quiet
+	/tmp/cwrvis-pip-env/bin/pip download \
+		--quiet \
+		--python-version 3.11 \
+		--platform manylinux_2_17_x86_64 \
+		--platform manylinux_2_28_x86_64 \
+		--only-binary :all: \
+		--dest $(DIST_DIR)/app/wheels/ \
+		-r /tmp/cwrvis-req-plain.txt
+	rm -rf /tmp/cwrvis-pip-env /tmp/cwrvis-req-plain.txt
+
 	# 生成的静态资产 → static/
 	rsync -a static/ $(DIST_DIR)/static/
 
@@ -119,16 +141,13 @@ package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz
 	mkdir -p $(DIST_DIR)/db
 	cp db/stats.db $(DIST_DIR)/db/stats.db
 
-	# 配置 → conf/（使用 example 作为初始模板，若已有 config.env 则覆盖）
+	# 配置 → conf/（example 作为初始模板，若已有 config.env 则覆盖）
 	cp conf/config.env.example $(DIST_DIR)/conf/config.env
 	[ -f conf/config.env ] && cp conf/config.env $(DIST_DIR)/conf/config.env || true
 
 	# 运行脚本 → bin/
 	cp bin/start.sh bin/stop.sh $(DIST_DIR)/bin/
 	chmod +x $(DIST_DIR)/bin/start.sh $(DIST_DIR)/bin/stop.sh
-
-	# 在 app/ 中创建 venv 并安装 Python 依赖
-	cd $(DIST_DIR)/app && uv venv .venv && uv pip install .
 
 	# 打压缩包
 	mkdir -p dist

@@ -7,7 +7,9 @@
 
 ## 部署理念
 
-**单进程、单压缩包**。FastAPI 同时承担 REST API 与静态文件服务，无需 Nginx。目标机只需安装 `uv`，解压分发包后执行 `bin/start.sh` 即可启动。
+**单进程、单压缩包、离线可用**。FastAPI 同时承担 REST API 与静态文件服务，无需 Nginx。
+
+分发包内预嵌 Linux x86_64 wheel 缓存，目标机只需安装 `uv`，**无需网络**即可完成依赖安装和启动。构建机（macOS / Linux 均可）在 `make package` 时同时指定 `manylinux_2_17_x86_64` 和 `manylinux_2_28_x86_64` 两个 platform tag 预取 Linux wheel（不同包使用不同 ABI，两个 tag 的 wheel 均兼容 Ubuntu 20.04+），实现"在 macOS 构建、Linux 离线运行"。
 
 ---
 
@@ -16,15 +18,17 @@
 ```
 cwrvis-{version}/
 ├── bin/
-│   ├── start.sh          # 启动服务
-│   └── stop.sh           # 停止服务
+│   ├── start.sh          # 启动服务（首次自动建 venv，支持离线）
+│   └── stop.sh           # 停止服务（读 PID 文件）
 ├── app/                  # FastAPI 应用代码（来自仓库 backend/）
 │   ├── main.py
 │   ├── routers/
 │   ├── pyproject.toml
-│   └── ...
+│   ├── requirements.txt  # uv export 生成的锁定依赖清单（供离线安装使用）
+│   └── wheels/           # Linux x86_64 wheel 缓存（make package 时预取）
 ├── static/               # FastAPI StaticFiles 托管目录（对外可访问）
 │   ├── grid/             # 格点 JSON + meta.json（预生成，约 33MB）
+│   ├── shapes/           # 区域 GeoJSON（region_id 命名）
 │   ├── reports/          # 预生成 .docx 报告
 │   └── web/              # 前端 pnpm build 产物
 ├── db/                   # 仅 FastAPI 内部访问，不挂载为静态路由
@@ -56,22 +60,43 @@ app.mount("/",        StaticFiles(directory="../static/web", html=True), name="w
 
 ## 启动脚本
 
-**`bin/start.sh`**：
+**`bin/start.sh`**（首次自动建 venv，优先离线 wheel 缓存）：
 ```bash
 #!/usr/bin/env bash
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="$ROOT/app"
+VENV="$APP/.venv"
+
 [ -f "$ROOT/conf/config.env" ] && source "$ROOT/conf/config.env"
-cd "$ROOT/app"
-uv sync --quiet
-exec uv run uvicorn main:app \
+
+# 首次启动：建 venv 并安装依赖（优先离线 wheels/，否则在线）
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "[cwrvis] 初始化 Python 虚拟环境..."
+    uv venv "$VENV"
+    if [ -d "$APP/wheels" ] && [ -f "$APP/requirements.txt" ]; then
+        echo "[cwrvis] 离线安装依赖（使用内嵌 wheel 缓存）..."
+        uv pip install --python "$VENV/bin/python" \
+            --no-index --find-links "$APP/wheels" \
+            -r "$APP/requirements.txt"
+    else
+        echo "[cwrvis] 在线安装依赖（需要网络）..."
+        uv pip install --python "$VENV/bin/python" "$APP"
+    fi
+fi
+
+mkdir -p "$ROOT/logs"
+cd "$APP"
+
+"$VENV/bin/python" -m uvicorn main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers 2 \
     --log-level info \
     >> "$ROOT/logs/app.log" 2>&1 &
+
 echo $! > "$ROOT/logs/app.pid"
-echo "cwrvis started (pid $!)"
+echo "cwrvis started  (pid=$(cat "$ROOT/logs/app.pid")  port=${PORT:-8000})"
 ```
 
 **`bin/stop.sh`**：
@@ -150,24 +175,25 @@ sudo systemctl enable --now cwrvis
 ### 首次部署
 
 ```bash
-# 1. 目标机安装 uv（仅首次）
+# 0. 构建机（开发机）打包（需已运行 make setup 初始化环境）
+make package VERSION=1.0.0
+# 产物：dist/cwrvis-1.0.0.tar.gz（内含 wheels/ 缓存，支持离线安装）
+
+# 1. 目标机安装 uv（仅首次，约 5s）
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. 上传并解压分发包
-scp cwrvis-{version}.tar.gz user@server:/opt/
-ssh user@server "cd /opt && tar xf cwrvis-{version}.tar.gz && mv cwrvis-{version} cwrvis"
+scp dist/cwrvis-1.0.0.tar.gz user@server:/opt/
+ssh user@server "cd /opt && tar xf cwrvis-1.0.0.tar.gz && ln -sfn cwrvis-1.0.0 cwrvis"
 
-# 3. 配置环境变量
-cp /opt/cwrvis/conf/config.env.example /opt/cwrvis/conf/config.env
-# 按需编辑 PORT 等配置
+# 3. 配置环境变量（按需修改 PORT 等）
+vim /opt/cwrvis/conf/config.env
 
-# 4. 上传预生成静态数据（在开发机/数据机上生成后同步）
-rsync -av output/static/grid/   user@server:/opt/cwrvis/static/grid/
-rsync -av output/static/db/     user@server:/opt/cwrvis/db/
-# 将同事提供的 .docx 报告放入 /opt/cwrvis/static/reports/
-
-# 5. 启动
+# 4. 启动（首次自动离线安装依赖，约 10s）
 /opt/cwrvis/bin/start.sh
+
+# 5. 验证
+curl http://localhost:8000/api/v1/health
 ```
 
 ### 应用代码更新
