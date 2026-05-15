@@ -150,3 +150,32 @@
 **实际行为**：`SPEEDS` 数组被错误地从 `[0.5,1,2,4]` 改为 `[0.25,0.5,1,2]`
 **相关文件**：`frontend/src/components/layout/BottomBar.vue`
 **修复记录**：b121b2e — 还原 `SPEEDS = [0.5, 1, 2, 4]`，保留基准 1000ms/帧
+
+---
+
+## BUG-12 · kg→mm 切换后格点图层冻结
+
+**发现时间**：2026-05-15
+**严重程度**：Critical
+**重现步骤**：
+1. 在格点数据模块，选择 kg 单位变量（如 CWR）
+2. 点击图例中的"点击以换算为 mm"切换按钮
+3. 尝试切换时间帧或播放
+**期望行为**：图层随帧正常更新，颜色随 mm 换算值变化
+**实际行为**：图层固定不变，帧切换无响应
+**相关文件**：`frontend/src/composables/useGridLayer.ts:183`
+**修复记录**：5e1746c — 引入 `toRaw()` 对 `metaStore.grid.dxy` 解包后再 `postMessage`，避免 Vue Proxy 导致的 `DataCloneError`
+
+---
+
+## BUG-13 · 格点 hover / PinTip / Inspector 坐标仅 1 位小数
+
+**发现时间**：2026-05-15
+**严重程度**：Minor
+**重现步骤**：
+1. 在格点数据模块，鼠标悬停或点击地图上任意格点
+2. 观察 HoverTooltip / PinTip / Inspector 显示的经纬度坐标
+**期望行为**：显示 3 位小数，如 `32.509°N 87.750°E`
+**实际行为**：仅 1 位小数，如 `32.5°N 87.8°E`，精度不足
+**相关文件**：`frontend/src/components/map/HoverTooltip.vue:17`、`frontend/src/components/map/PinTip.vue:22`、`frontend/src/components/panels/Inspector.vue:24`
+**修复记录**：5e1746c — 三处 `toFixed(1)` 统一改为 `toFixed(3)`
