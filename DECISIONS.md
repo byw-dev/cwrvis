@@ -208,3 +208,32 @@
 **代价**：每次 `make dev` 写一次磁盘（可忽略）；版本号仍需手动 bump（未来采用 git tag + `git describe` 后可自动化）。
 
 **未来演进路径**：采用 git tag 后，`gen_build_info.sh` 改用 `git describe --tags --always --dirty` 自动推导版本，`VERSION` Makefile 变量变为可选覆盖。
+
+---
+
+## MVP 区域数据
+
+### DEC-017：MVP 阶段区域 ID 与父子关系全部硬编码
+
+**状态**：Active（已知技术债，待未来迭代解决）
+
+**决策**：Phase 1 中所有区域相关代码均以字面量或常量硬编码 8 个区域 ID（`xizang` + 7 地市），以及 xizang 与地市之间的父子关系（xizang 是所有地市的"全区"父级）。不引入动态区域配置或层级数据模型。
+
+**背景**：MVP 范围明确——仅西藏自治区一省八市，甲方短期内不要求扩展到其他省份或更细的区域层级（县、乡）。快速交付优先于可扩展性。
+
+**原因**：
+- 硬编码消除了运行时配置加载的复杂度
+- 区域 GeoJSON、SQLite 统计表、前端图层逻辑均已与 8 个固定 ID 对齐，统一修改成本低
+- 甲方未明确提出多省/多层级需求，过早抽象引入无谓复杂度
+
+**代价（重构时需同步修改的位置）**：
+
+| 位置 | 硬编码内容 |
+|------|-----------|
+| `frontend/src/composables/useRegionLayer.ts` | `DISTRICT_IDS` 常量、`buildAllGeo` ID 列表、`buildMaskGeo` 假设 xizang 为外边界、`onMapClick` 中 xizang 不可点击、`applySelection` xizang 特判 |
+| `frontend/src/composables/useRegionLayer.ts` | `regionName()` 中 xizang 显示名称硬编码 |
+| `frontend/src/types/index.ts` | `RegionId` 类型为字面量联合类型 |
+| `backend/config.py` | `REGION_MAP` 字典，区域 ID → 中文名 |
+| `scripts/netcdf_to_sqlite.py` / `csv_to_sqlite.py` | 区域 ID 从 shape 文件名推断，无层级概念 |
+
+**触发条件**：一旦需要支持多省、县级区域或动态区域配置，须先设计区域层级数据模型（建议参考 `region_id` + `parent_id` + `level` 的树形结构），再系统性替换上述所有位置。见 `docs/tasks/backlog.md`。

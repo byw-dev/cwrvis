@@ -361,9 +361,9 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 - [x] `DONE` **F-20** `[M]` 区域统计模块 kg→mm 换算
 
-- [ ] `TODO` **F-21** `[S]` 区域边界视觉清晰度改善（Enhancement）
-  - 双层 LineLayer 光晕效果：底层深色描边 + 顶层青色细线
-  - 提升悬停/选中 fill-opacity；见 `docs/design/frontend.md` F-21 节
+- [x] `DONE` **F-21** `[S]` 区域边界视觉清晰度改善（Enhancement）
+  - "聚光灯"方案：反向遮罩 + dimmed/lineVisible feature-state + fitBounds 自动居中
+  - 见 `docs/design/frontend.md` F-21 节
   - `← needs: F-14`
 
 - [ ] `TODO` **F-22** `[M]` 格点图层等值线叠加（Feature，优先级最高）

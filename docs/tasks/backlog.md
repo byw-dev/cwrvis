@@ -17,6 +17,7 @@
 
 ## 技术债 / 优化
 
+- **区域层级关系通用化**（见 DEC-017）：当前区域 ID、父子关系全部硬编码，扩展到多省/多层级时需系统性重构前后端
 - Web Worker 改为 SharedArrayBuffer + 零拷贝传输（需 COOP/COEP header）
 - 格点 JSON 改为 MessagePack 二进制格式（减小体积约 30%）
 - 区域统计数据考虑一次性全量加载（当前是按 region + var 懒加载）
