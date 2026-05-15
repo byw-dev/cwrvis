@@ -37,6 +37,7 @@ cwrvis/
 │   │   ├── backend.md         # 后端 API 接口详细规格
 │   │   ├── frontend.md        # 前端架构、渲染方案、CSS 规范
 │   │   └── deployment.md      # 部署与运维
+│   ├── research/              # 调研与外部参考资料（算法逆向、竞品分析等）
 │   └── tasks/                 # 任务与 BUG 管理
 │       ├── SCHEMA.md          # 任务/BUG 条目格式规范
 │       ├── BUG-WORKFLOW.md    # BUG 三阶段处理流程（报告→修复→关闭）
