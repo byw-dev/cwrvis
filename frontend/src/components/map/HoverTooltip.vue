@@ -14,7 +14,7 @@ defineProps<{
 <template>
   <div class="hover-tip" :style="{ left: `${x + 14}px`, top: `${y - 8}px` }">
     <div class="ht-header">
-      <span class="coord">{{ lat.toFixed(1) }}°N&nbsp;{{ lon.toFixed(1) }}°E</span>
+      <span class="coord">{{ lat.toFixed(3) }}°N&nbsp;{{ lon.toFixed(3) }}°E</span>
     </div>
     <div class="ht-meta">
       <span class="ht-label">{{ frameLabel }}</span>

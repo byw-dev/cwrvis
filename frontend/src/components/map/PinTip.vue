@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
   <div class="pin-tip" :style="{ left: `${x + 10}px`, top: `${y - 60}px` }">
     <div class="pin-row pin-header">
-      <span class="coord">{{ lat.toFixed(1) }}°N&nbsp;{{ lon.toFixed(1) }}°E</span>
+      <span class="coord">{{ lat.toFixed(3) }}°N&nbsp;{{ lon.toFixed(3) }}°E</span>
       <button class="pin-close" @click="emit('clear')">✕</button>
     </div>
     <div class="pin-row">

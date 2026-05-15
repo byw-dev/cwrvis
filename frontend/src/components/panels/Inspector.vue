@@ -21,7 +21,7 @@ const emit = defineEmits<{
 const hasValue = computed(() => props.value !== undefined && props.value !== null)
 const coordLabel = computed(() =>
   props.mode === 'grid'
-    ? `${props.lat?.toFixed(1)}°N ${props.lon?.toFixed(1)}°E`
+    ? `${props.lat?.toFixed(3)}°N ${props.lon?.toFixed(3)}°E`
     : (props.regionName ?? '—')
 )
 </script>

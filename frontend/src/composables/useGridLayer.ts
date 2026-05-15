@@ -1,4 +1,4 @@
-import { ref, watch, shallowRef, onUnmounted } from 'vue'
+import { ref, watch, shallowRef, onUnmounted, toRaw } from 'vue'
 import { useMap } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
@@ -145,7 +145,9 @@ export function useGridLayer() {
     const lut    = getLut(cmName)
 
     const needConvert = isKgToMm.value && VARS[varName]?.units === 'kg'
-    const dxy = needConvert ? (metaStore.grid?.dxy ?? null) : null
+    // metaStore.grid.dxy 是 Vue reactive Proxy，postMessage structuredClone 无法序列化；
+    // toRaw 取出底层原始数组再传给 Worker
+    const dxy = needConvert ? (metaStore.grid?.dxy ? toRaw(metaStore.grid.dxy) : null) : null
 
     // 逐帧从数据自动计算量程（mm 模式下用换算后的值推算）
     let dataMin = Infinity, dataMax = -Infinity
