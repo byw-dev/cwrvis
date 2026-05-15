@@ -40,6 +40,7 @@ cwrvis/
 │   └── tasks/                 # 任务与 BUG 管理
 │       ├── SCHEMA.md          # 任务/BUG 条目格式规范
 │       ├── BUG-WORKFLOW.md    # BUG 三阶段处理流程（报告→修复→关闭）
+│       ├── FEATURE-WORKFLOW.md # Feature / Enhancement / Tweak 分类与处理流程
 │       ├── active.md          # 当前进行中的任务（≤5 项）
 │       ├── backlog.md         # 未规划需求 + 待外部确认事项
 │       ├── phases/
@@ -192,7 +193,13 @@ pnpm install      # corepack 自动使用 package.json 中声明的版本
 5. **修改数据文件命名规则或格式前**，必须同步更新相关设计文档与前后端代码中的所有引用
 6. **不得**在前端直接发起对 netcdf 文件的请求，所有格点数据通过预生成 JSON 静态文件获取
 7. **不得**在运行时执行 xarray/numpy 计算，所有计算在离线脚本阶段完成
-8. **遇到 BUG 报告时**，必须遵循 `docs/tasks/BUG-WORKFLOW.md` 的三阶段流程（报告→修复→关闭），每个阶段均须独立 commit，不得跳过
+8. **收到任何用户请求时**，必须先分类再执行：
+   - **Bug**（原本正常、现在不符合设计）→ `docs/tasks/BUG-WORKFLOW.md`
+   - **Tweak**（改颜色/文案/间距等微调，< 半天）→ 直接在 `dev` 实现
+   - **Enhancement**（改进已有功能，架构不变）→ `enhance/` 分支
+   - **Feature**（新增此前不存在的功能）→ `feature/` 分支
+   - 执行前须**向用户说明分类及理由**（一句话），用户可纠正
+   - Enhancement / Feature 完整流程见 `docs/tasks/FEATURE-WORKFLOW.md`
 
 ### 提交信息规范
 

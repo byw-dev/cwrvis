@@ -11,3 +11,4 @@
 | 已修复的 Bug（含根因/方案） | [`docs/tasks/bugs/closed.md`](docs/tasks/bugs/closed.md) |
 | 任务 / Bug 条目格式规范 | [`docs/tasks/SCHEMA.md`](docs/tasks/SCHEMA.md) |
 | Bug 三阶段处理流程 | [`docs/tasks/BUG-WORKFLOW.md`](docs/tasks/BUG-WORKFLOW.md) |
+| Feature / Enhancement / Tweak 处理流程 | [`docs/tasks/FEATURE-WORKFLOW.md`](docs/tasks/FEATURE-WORKFLOW.md) |
