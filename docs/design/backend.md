@@ -1,6 +1,6 @@
 # 后端 API 设计 — cwrvis
 
-> 文档版本：v1.0  
+> 文档版本：v1.1  
 > 对应模块：`backend/`
 
 ---
@@ -178,19 +178,19 @@ filepath = REPORT_DIR / filename
 {
   "ok": true,
   "data": [
-    { "region_id": "xizang",  "name": "西藏自治区", "level": "province" },
-    { "region_id": "lasa",    "name": "拉萨市",     "level": "prefecture" },
-    { "region_id": "rikaze",  "name": "日喀则市",   "level": "prefecture" },
-    { "region_id": "shannan", "name": "山南市",     "level": "prefecture" },
-    { "region_id": "linzhi",  "name": "林芝市",     "level": "prefecture" },
-    { "region_id": "changdu", "name": "昌都市",     "level": "prefecture" },
-    { "region_id": "naqu",    "name": "那曲市",     "level": "prefecture" },
-    { "region_id": "ali",     "name": "阿里地区",   "level": "prefecture" }
+    { "region_id": "xizang",  "name": "西藏自治区", "level": "province",   "area_m2": 1.23e12 },
+    { "region_id": "lasa",    "name": "拉萨市",     "level": "prefecture", "area_m2": 2.95e10 },
+    { "region_id": "rikaze",  "name": "日喀则市",   "level": "prefecture", "area_m2": 1.82e11 },
+    { "region_id": "shannan", "name": "山南市",     "level": "prefecture", "area_m2": 7.99e10 },
+    { "region_id": "linzhi",  "name": "林芝市",     "level": "prefecture", "area_m2": 1.14e11 },
+    { "region_id": "changdu", "name": "昌都市",     "level": "prefecture", "area_m2": 1.09e11 },
+    { "region_id": "naqu",    "name": "那曲市",     "level": "prefecture", "area_m2": 3.52e11 },
+    { "region_id": "ali",     "name": "阿里地区",   "level": "prefecture", "area_m2": 3.45e11 }
   ]
 }
 ```
 
-实现：从 `config.py` 中硬编码的 `REGION_IDS` 列表（dict）直接返回，无需查询数据库。
+实现：以 `config.py` 中硬编码的 `REGION_IDS` 列表为基础，JOIN `stats.db` 的 `region_areas` 表追加 `area_m2` 字段。若 `region_areas` 中无该区域的记录（如 stats.db 尚未生成），`area_m2` 返回 `null`，前端应禁用 kg→mm 换算。响应中的面积数值仅为示例，实际值由离线脚本计算。
 
 ### 区域 GeoJSON 静态文件
 

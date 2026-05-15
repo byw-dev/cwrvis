@@ -2,10 +2,12 @@
 
 > 保持 ≤5 项。任务完成后立即从此处删除，并在 `phases/*.md` 中更新状态为 DONE。
 
-当前阶段：**Phase 1 MVP — D 系列待启动**
-
-S / B / F 三个系列（27 项）均已完成；剩余 D 系列 3 项（部署与运维）尚未开始。
+当前阶段：**Phase 1 MVP — 区域统计 kg→mm 换算**
 
 ---
 
-_（暂无进行中的任务——D-01 / D-02 / D-03 待启动，见 `phases/phase-1-mvp.md`）_
+## 区域统计 kg→mm 换算
+
+- [ ] `IN_PROGRESS` **S-06** `[S]` region_areas 表写入 stats.db（两条路径）
+- [ ] `TODO` **B-05** `[S]` /meta/regions 接口新增 area_m2 字段
+- [ ] `TODO` **F-20** `[M]` 区域统计模块 kg→mm 换算（Inspector / RegionHistoryModal）

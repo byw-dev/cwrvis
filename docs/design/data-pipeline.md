@@ -1,6 +1,6 @@
 # 数据预生成流程设计 — cwrvis
 
-> 文档版本：v1.3  
+> 文档版本：v1.4  
 > 对应模块：`scripts/`
 
 ---
@@ -215,6 +215,17 @@ vals = frame_2d[mask & ~np.isnan(frame_2d)]
 value = np.sum(vals) if var_unit == 'kg' else np.mean(vals)
 ```
 
+**区域面积计算（`region_areas` 表）**
+
+每种聚合方法在 `prepare()` 阶段一并计算区域有效面积，写入 `region_areas` 表：
+
+| 方法 | area_m2 计算方式 |
+|------|----------------|
+| `AreaWeightedMean` | `Σ(dxy[i][j] × overlap_ratio[i][j])`，对所有与区域有面积交叉的格点加权求和 |
+| `PointInBoundary` | `Σ(dxy[i][j])` for `mask[i][j] == True`，对中心点在边界内的格点求和 |
+
+`dxy` 数组从 netcdf 文件中读取（与格点 JSON 导出时使用的同一数组，单位 m²）。
+
 **var 单位与聚合算子对应关系**（`PointInBoundary` 使用）：
 
 | 单位 | 算子 | 对应 var |
@@ -254,6 +265,13 @@ CREATE TABLE region_stats (
 );
 
 CREATE INDEX idx_region_gran ON region_stats (region_id, granularity, year, month);
+
+-- 区域有效面积（供前端 kg→mm 单位换算使用）
+-- 计算方式随空间聚合路径不同而异（见下方各路径说明）
+CREATE TABLE region_areas (
+    region_id TEXT PRIMARY KEY,
+    area_m2   REAL NOT NULL
+);
 ```
 
 ### 后端时间聚合 SQL 示例
@@ -346,11 +364,12 @@ data/csv/
 
 **时间列**：`time` 列值格式为 `YYYY-MM-DDT00:00:00`。月粒度取年份和月份；年粒度取年份，month 写 `NULL`。
 
-**导入的列**（共 15 个，其余约 30 个额外列忽略）：
+**导入的列**：
 
-`SP`、`aveMv`、`aveMh`、`INv`、`OTv`、`INh`、`OTh`、`MC`、`GMh`、`GMv`、`CWR`、`CEv`、`PEh`、`RCv`、`RCh`
+- **`region_stats` 表**（共 15 个 var 列）：`SP`、`aveMv`、`aveMh`、`INv`、`OTv`、`INh`、`OTh`、`MC`、`GMh`、`GMv`、`CWR`、`CEv`、`PEh`、`RCv`、`RCh`
+- **`region_areas` 表**（1 列）：`dxy`——CSV 中每行值相同（区域总面积），取任意一行的第一个非空值写入 `area_m2`
 
-忽略的列包括：`INw`、`OTw`、`GMw`、`AWR`、`PEv`、`PEw`、`Mv0`、`MvT`、`Mh0`、`MhT`、`Mw0`、`MwT`、`SE`、`ME`、`dxy`、方向分量（`INv_W/E/N/S` 等）、`data_source`、`period_unit`。
+忽略的列包括：`INw`、`OTw`、`GMw`、`AWR`、`PEv`、`PEw`、`Mv0`、`MvT`、`Mh0`、`MhT`、`Mw0`、`MwT`、`SE`、`ME`、方向分量（`INv_W/E/N/S` 等）、`data_source`、`period_unit`。
 
 #### 执行方式
 

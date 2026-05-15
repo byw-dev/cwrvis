@@ -497,10 +497,6 @@ kg→mm 和 mm→kg 双向切换均不产生额外网络请求。
 
 切换单位（任意方向）时，立即清除用户手动填写的 min/max，使用自动量程（由新单位数据推算）。用户此后若重新输入 min/max，遵循原有逻辑。
 
-**不适用范围**
-
-区域统计（`RegionHistoryModal`）的数据来自 SQLite 聚合值（区域总量 kg），无对应面积信息，**不实现**单位换算。
-
 ---
 
 ### HistoryModal（格点数据）
@@ -550,6 +546,36 @@ GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=202
 | 年平均 | `mean_all` | `AVG(...)` | 1 |
 | 月平均 | `mean_month` | `AVG(...) GROUP BY month` | 12 |
 | 季平均 | `mean_season` | `AVG(...) GROUP BY season` | 4 |
+
+### kg→mm 单位换算
+
+与格点数据模块复用同一套交互逻辑，但换算分母不同。
+
+**换算公式**：`mm = region_kg / area_m2`
+
+`area_m2`（区域有效面积）从 `/api/v1/meta/regions` 响应的 `area_m2` 字段读取，由 `regionStore.regions` 缓存。计算方式与生成 stats.db 的空间聚合路径一致（见 `data-pipeline.md`）。
+
+**状态**
+
+复用格点模块导出的 `isKgToMm` ref（`composables/useGridLayer.ts`），无需额外状态。区域统计模块与格点数据模块共享该开关，切换时两侧同步；切换选中区域（`selRegionId` 变化）时**不重置** `isKgToMm`，保持当前单位以便跨区域对比。
+
+**UI — 图例面板（Legend）**
+
+同格点模块，`units === 'kg'` 时出现单位切换按钮，行为完全一致。
+
+**UI — RegionHistoryModal 标题栏**
+
+- `units === 'kg'` 时，标题右侧追加切换按钮，文案 `kg→mm` / `mm→kg`（与 HistoryModal 格点模式相同）
+- 与 `isKgToMm` 双向绑定，点击切换后图表立即更新
+
+**换算路径**
+
+| 位置 | 方式 |
+|------|------|
+| RegionModule Inspector 展示值 | `value / region.area_m2`（组件层，不改 store） |
+| RegionHistoryModal 折线数据 | 取 `statsCache` 行的 kg 值后 `/ area_m2`，Y 轴单位改为 `mm` |
+
+**若 `area_m2` 为 null**（stats.db 未生成或版本不兼容）：Legend 的单位切换按钮不显示，行为退回纯 kg 展示。
 
 ### HistoryModal（区域统计）
 

@@ -118,6 +118,12 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - region_id 映射见 `backend/config.py` 的 `REGION_MAP`
   - 实现为 Makefile `shapes` target，集成到打包流程（D-01 依赖此项）
 
+- [ ] `IN_PROGRESS` **S-06** `[S]` region_areas 表写入 stats.db
+  - 两条路径均在同一次脚本运行中写入 `region_areas(region_id, area_m2)` 表
+  - **路径 A**（`netcdf_to_sqlite.py`）：`prepare()` 阶段一并计算；`AreaWeightedMean`：`Σ(dxy × overlap_ratio)`；`PointInBoundary`：`Σ(dxy[mask])`
+  - **路径 B**（`csv_to_sqlite.py`）：从 CSV 首行读 `dxy` 列（区域总面积），写入 `area_m2`
+  - `← needs: S-02`
+
 - [x] `DONE` **S-05** `[S]` scripts Python 环境管理（`scripts/pyproject.toml` + `make setup`）
   - 新增 `scripts/pyproject.toml`，声明数据处理依赖（numpy / xarray / netCDF4 / shapely）
   - Makefile：`data-grid` / `data-sqlite` / `data-sqlite-csv` 改用 `uv run --project scripts`；新增 `setup` target 一键初始化所有环境
@@ -164,6 +170,11 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 从 `REGION_MAP` 硬编码返回区域列表（`region_id`、`name`、`level`）
   - 无数据库查询
   - `← needs: B-01`
+
+- [ ] `TODO` **B-05** `[S]` `/api/v1/meta/regions` 新增 `area_m2` 字段
+  - JOIN `stats.db` 的 `region_areas` 表，将 `area_m2` 追加到每个区域元数据
+  - 若区域无面积记录，`area_m2` 返回 `null`（不阻断响应，前端降级禁用换算）
+  - `← needs: B-04, S-06`
 
 ---
 
@@ -330,6 +341,14 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 显示模块编号 + 名称 + "该模块正在建设中"，风格与主题一致
   - `← needs: F-02`
 
+- [ ] `TODO` **F-20** `[M]` 区域统计模块 kg→mm 换算
+  - `RegionMeta` 类型增加 `area_m2?: number`，从 `/meta/regions` 响应读取
+  - 复用 `isKgToMm` ref（`useGridLayer.ts` 导出）；区域切换时**不重置**
+  - `RegionModule.vue`：`currentValue` 展示时按 `value / area_m2` 换算，Inspector `unit` prop 动态为 `mm` 或 `kg`
+  - `RegionHistoryModal.vue`：折线数据取值后 `/ area_m2`；Y 轴单位标注同步；标题栏追加 `kg→mm / mm→kg` 按钮（与 HistoryModal 格点模式样式一致）
+  - `area_m2` 为 `null` 时：Legend 单位切换按钮不显示，降级为纯 kg 展示
+  - `← needs: B-05, F-16`
+
 ---
 
 ## D — Deploy / 部署与运维
@@ -359,10 +378,10 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
-| S 脚本 | 5 | 5 | 0 | 0 | 0 |
-| B 后端 | 4 | 4 | 0 | 0 | 0 |
-| F 前端 | 19 | 19 | 0 | 0 | 0 |
+| S 脚本 | 6 | 5 | 1 | 0 | 0 |
+| B 后端 | 5 | 4 | 0 | 1 | 0 |
+| F 前端 | 20 | 19 | 0 | 1 | 0 |
 | D 部署 | 3 | 1 | 0 | 2 | 0 |
-| **合计** | **31** | **29** | **0** | **2** | **0** |
+| **合计** | **34** | **29** | **1** | **4** | **0** |
 
-**预估剩余工时**（单人）：约 2–4 天（仅剩 D 系列 3 项部署任务）
+**预估剩余工时**（单人）：约 3–5 天（区域统计 kg→mm 换算 3 项 + D 系列部署 2 项）
