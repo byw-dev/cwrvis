@@ -1,6 +1,6 @@
 # 数据预生成流程设计 — cwrvis
 
-> 文档版本：v1.4  
+> 文档版本：v1.5  
 > 对应模块：`scripts/`
 
 ---
@@ -292,19 +292,33 @@ WHERE region_id = ? AND granularity = 'month'
   AND year BETWEEN ? AND ?
 GROUP BY month ORDER BY month;
 
--- mean_season：季节气候态
-SELECT
-  CASE
-    WHEN month IN (3,4,5) THEN 'spring'
-    WHEN month IN (6,7,8) THEN 'summer'
-    WHEN month IN (9,10,11) THEN 'autumn'
-    ELSE 'winter'
-  END AS season,
-  AVG(SP) AS SP, AVG(CWR) AS CWR, ...
-FROM region_stats
-WHERE region_id = ? AND granularity = 'month'
-  AND year BETWEEN ? AND ?
-GROUP BY season;
+-- mean_season：季节气候态（两步聚合）
+-- 第一步：每区域每年每季节聚合（kg 列 SUM，非 kg 列 AVG）
+WITH season_per_year AS (
+  SELECT
+    region_id, year,
+    CASE
+      WHEN month IN (3,4,5)   THEN 'spring'
+      WHEN month IN (6,7,8)   THEN 'summer'
+      WHEN month IN (9,10,11) THEN 'autumn'
+      ELSE                         'winter'
+    END AS season,
+    SUM(SP) AS SP, SUM(CWR) AS CWR, SUM(aveMv) AS aveMv,   -- kg 列 SUM
+    SUM(aveMh) AS aveMh, SUM(INv) AS INv, SUM(OTv) AS OTv,
+    SUM(INh) AS INh, SUM(OTh) AS OTh, SUM(MC) AS MC,
+    SUM(GMh) AS GMh, SUM(GMv) AS GMv,
+    AVG(CEv) AS CEv, AVG(PEh) AS PEh,                       -- 非 kg 列 AVG
+    AVG(RCv) AS RCv, AVG(RCh) AS RCh
+  FROM region_stats
+  WHERE region_id = ? AND granularity = 'month'
+    AND year BETWEEN ? AND ?
+  GROUP BY region_id, year, season
+)
+-- 第二步：跨年取均值
+SELECT season, AVG(SP) AS SP, AVG(CWR) AS CWR, ...
+FROM season_per_year
+GROUP BY season
+ORDER BY season;
 ```
 
 ### 执行参数

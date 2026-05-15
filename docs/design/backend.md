@@ -1,6 +1,6 @@
 # 后端 API 设计 — cwrvis
 
-> 文档版本：v1.1  
+> 文档版本：v1.2  
 > 对应模块：`backend/`
 
 ---
@@ -128,7 +128,34 @@ backend/
 - `year` / `month`：`SELECT year, month, SP, CWR, ... WHERE region_id=? AND granularity=? AND year BETWEEN ? AND ?`
 - `mean_all`：`SELECT AVG(SP), AVG(CWR), ... WHERE granularity='year' AND year BETWEEN ? AND ?`
 - `mean_month`：`AVG(...) GROUP BY month`，源数据 `granularity='month'`
-- `mean_season`：`AVG(...) GROUP BY CASE WHEN month IN (3,4,5) THEN 'spring' ...`
+- `mean_season`：**两步聚合**，见下方说明
+
+**`mean_season` 两步聚合设计**
+
+物理语义：先得到每年每季节的统计值，再跨年取均值。直接对月度数据 `AVG+GROUP BY season` 会使 kg 类变量数值偏低（约为季度总量的 1/3）。
+
+```
+第一步（CTE season_per_year）：
+  对 region_stats（granularity='month'）按 (region_id, year, season) 分组
+  ├── kg 列（SP/CWR/aveMv 等）：SUM()  → 该年该季度总量
+  └── 非 kg 列（CEv/PEh/RCv/RCh）：AVG()  → 该年该季度均值
+
+第二步（外层 SELECT）：
+  对 CTE 结果按 season 分组，所有列做 AVG()  → 多年季节均值
+```
+
+季节定义（自然年，不跨历年）：
+
+| 季节 | month |
+|------|-------|
+| spring | 3, 4, 5 |
+| summer | 6, 7, 8 |
+| autumn | 9, 10, 11 |
+| winter | 1, 2, 12（同一自然年内） |
+
+最后一年若冬季月份不完整（如缺 12 月），接受该不完整结果参与均值计算。
+
+`KG_VARS` 列表定义在 `backend/config.py`，与 `scripts/netcdf_to_sqlite.py` 保持一致。
 
 **参数校验**：
 - `granularity` 必须为 5 个合法值之一

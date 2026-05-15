@@ -8,8 +8,6 @@
 
 ## 区域统计 kg→mm 换算
 
-_（区域统计 kg→mm 换算已完成，S-06 / B-05 / F-20 均已合入 dev）_
+## mean_season 两步聚合修正
 
----
-
-**下一步**：D-02 / D-03 部署任务待启动（见 `phases/phase-1-mvp.md`）
+- [ ] `IN_PROGRESS` **B-06** `[S]` 修正 mean_season SQL（两步聚合：月→季 SUM/AVG，再跨年 AVG）
