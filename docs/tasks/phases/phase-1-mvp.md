@@ -360,6 +360,27 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - `← needs: F-02`
 
 - [x] `DONE` **F-20** `[M]` 区域统计模块 kg→mm 换算
+
+- [ ] `TODO` **F-21** `[S]` 区域边界视觉清晰度改善（Enhancement）
+  - 双层 LineLayer 光晕效果：底层深色描边 + 顶层青色细线
+  - 提升悬停/选中 fill-opacity；见 `docs/design/frontend.md` F-21 节
+  - `← needs: F-14`
+
+- [ ] `TODO` **F-22** `[M]` 格点图层等值线叠加（Feature，优先级最高）
+  - 依赖 `d3-contour`；8 条等值线按 vmin/vmax 均分；4 种线型循环（细虚→粗虚→细实→粗实）
+  - 坐标变换：格点索引 → WGS-84；MapLibre geojson + line + symbol layer
+  - 等值线数值标注（toPrecision(4)，大数科学计数，不显示单位）
+  - 图例面板底部独立开关按钮；帧切换/kg↔mm 时自动重算
+  - `← needs: F-10`
+
+- [ ] `TODO` **F-23** `[M]` 格点图层高低点标注（Feature，优先级次之）
+  - 8-邻域比较法查局部极值；top-3 极大值（H，暖色）+ top-3 极小值（L，冷色）
+  - MapLibre symbol layer；数值格式同等值线
+  - 图例面板底部独立开关按钮；`← needs: F-10`
+
+- [ ] `TODO` **F-24** `[S]` 格点图层数值标注（Feature，低优先级）
+  - 格点中心显示数值；zoom ≥ 6 时渲染；text-allow-overlap: false
+  - MapLibre symbol layer；`← needs: F-10`
   - `RegionMeta` 类型增加 `area_m2?: number`，从 `/meta/regions` 响应读取
   - 复用 `isKgToMm` ref（`useGridLayer.ts` 导出）；区域切换时**不重置**
   - `RegionModule.vue`：`currentValue` 展示时按 `value / area_m2` 换算，Inspector `unit` prop 动态为 `mm` 或 `kg`
@@ -398,8 +419,8 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 6 | 6 | 0 | 0 | 0 |
 | B 后端 | 6 | 6 | 0 | 0 | 0 |
-| F 前端 | 20 | 20 | 0 | 0 | 0 |
+| F 前端 | 24 | 20 | 0 | 4 | 0 |
 | D 部署 | 3 | 1 | 0 | 2 | 0 |
-| **合计** | **35** | **33** | **0** | **2** | **0** |
+| **合计** | **39** | **33** | **0** | **6** | **0** |
 
-**预估剩余工时**（单人）：约 2–3 天（仅剩 D-02 / D-03 部署任务）
+**预估剩余工时**（单人）：约 4–6 天（F-21~F-24 前端叠加层 + D-02/D-03 部署）
