@@ -118,7 +118,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - region_id 映射见 `backend/config.py` 的 `REGION_MAP`
   - 实现为 Makefile `shapes` target，集成到打包流程（D-01 依赖此项）
 
-- [ ] `IN_PROGRESS` **S-06** `[S]` region_areas 表写入 stats.db
+- [x] `DONE` **S-06** `[S]` region_areas 表写入 stats.db
   - 两条路径均在同一次脚本运行中写入 `region_areas(region_id, area_m2)` 表
   - **路径 A**（`netcdf_to_sqlite.py`）：`prepare()` 阶段一并计算；`AreaWeightedMean`：`Σ(dxy × overlap_ratio)`；`PointInBoundary`：`Σ(dxy[mask])`
   - **路径 B**（`csv_to_sqlite.py`）：从 CSV 首行读 `dxy` 列（区域总面积），写入 `area_m2`
@@ -171,7 +171,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 无数据库查询
   - `← needs: B-01`
 
-- [ ] `TODO` **B-05** `[S]` `/api/v1/meta/regions` 新增 `area_m2` 字段
+- [x] `DONE` **B-05** `[S]` `/api/v1/meta/regions` 新增 `area_m2` 字段
   - JOIN `stats.db` 的 `region_areas` 表，将 `area_m2` 追加到每个区域元数据
   - 若区域无面积记录，`area_m2` 返回 `null`（不阻断响应，前端降级禁用换算）
   - `← needs: B-04, S-06`
@@ -341,7 +341,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 显示模块编号 + 名称 + "该模块正在建设中"，风格与主题一致
   - `← needs: F-02`
 
-- [ ] `TODO` **F-20** `[M]` 区域统计模块 kg→mm 换算
+- [x] `DONE` **F-20** `[M]` 区域统计模块 kg→mm 换算
   - `RegionMeta` 类型增加 `area_m2?: number`，从 `/meta/regions` 响应读取
   - 复用 `isKgToMm` ref（`useGridLayer.ts` 导出）；区域切换时**不重置**
   - `RegionModule.vue`：`currentValue` 展示时按 `value / area_m2` 换算，Inspector `unit` prop 动态为 `mm` 或 `kg`
@@ -378,10 +378,10 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
-| S 脚本 | 6 | 5 | 1 | 0 | 0 |
-| B 后端 | 5 | 4 | 0 | 1 | 0 |
-| F 前端 | 20 | 19 | 0 | 1 | 0 |
+| S 脚本 | 6 | 6 | 0 | 0 | 0 |
+| B 后端 | 5 | 5 | 0 | 0 | 0 |
+| F 前端 | 20 | 20 | 0 | 0 | 0 |
 | D 部署 | 3 | 1 | 0 | 2 | 0 |
-| **合计** | **34** | **29** | **1** | **4** | **0** |
+| **合计** | **34** | **32** | **0** | **2** | **0** |
 
-**预估剩余工时**（单人）：约 3–5 天（区域统计 kg→mm 换算 3 项 + D 系列部署 2 项）
+**预估剩余工时**（单人）：约 2–3 天（仅剩 D-02 / D-03 部署任务）

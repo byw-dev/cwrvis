@@ -8,6 +8,8 @@
 
 ## 区域统计 kg→mm 换算
 
-- [ ] `IN_PROGRESS` **S-06** `[S]` region_areas 表写入 stats.db（两条路径）
-- [ ] `TODO` **B-05** `[S]` /meta/regions 接口新增 area_m2 字段
-- [ ] `TODO` **F-20** `[M]` 区域统计模块 kg→mm 换算（Inspector / RegionHistoryModal）
+_（区域统计 kg→mm 换算已完成，S-06 / B-05 / F-20 均已合入 dev）_
+
+---
+
+**下一步**：D-02 / D-03 部署任务待启动（见 `phases/phase-1-mvp.md`）
