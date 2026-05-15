@@ -9,6 +9,7 @@ import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { VARS, VAR_GROUPS } from '@/config/vars'
 import { buildItems } from '@/stores/time'
+import { isKgToMm } from '@/composables/useGridLayer'
 import type { VarName, AggMode } from '@/types'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
@@ -45,6 +46,25 @@ const rightAxisCount  = ref(0)
 const hoveredSeries   = ref<string | null>(null)
 // modal width grows with each additional right axis; capped by viewport
 const modalWidth = computed(() => Math.min(1280, 800 + rightAxisCount.value * AXIS_W))
+
+// ── kg→mm 换算 ────────────────────────────────────────────────────────────────
+
+const area_m2 = computed<number | null>(() =>
+  regionStore.selRegion?.area_m2 ?? null
+)
+const anyKgVar = computed(() =>
+  activeVars.value.some(vn => VARS[vn].units === 'kg')
+)
+// true 仅当：用户已开启开关 + 当前有 kg var + 面积数据可用
+const convKg = computed(() =>
+  isKgToMm.value && anyKgVar.value && area_m2.value !== null
+)
+
+function effUnit(vn: VarName): string {
+  return convKg.value && VARS[vn].units === 'kg' ? 'mm' : VARS[vn].units
+}
+
+function toggleUnit(): void { isKgToMm.value = !isKgToMm.value }
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -107,12 +127,12 @@ function updateChart() {
   const markIdx = currentMarkIdx(mode)
 
   // ── Y-axis layout ──────────────────────────────────────────────────────
-  // kg 专占左轴；其他单位依次向右平铺，每轴间距 70px
+  // kg 专占左轴（换算后显示为 mm）；其他单位依次向右平铺
   const hasKg = activeVars.value.some(vn => VARS[vn].units === 'kg')
   const unitsOrdered: string[] = []
-  if (hasKg) unitsOrdered.push('kg')
+  if (hasKg) unitsOrdered.push(convKg.value ? 'mm' : 'kg')
   for (const vn of activeVars.value) {
-    const u = VARS[vn].units
+    const u = effUnit(vn)
     if (!unitsOrdered.includes(u)) unitsOrdered.push(u)
   }
 
@@ -156,13 +176,15 @@ function updateChart() {
     const rows = regionStore.getCached(regionStore.selRegionId, mode) ?? []
     const data = rows.map(r => {
       const v = r[vn as string]
-      return typeof v === 'number' ? v : null
+      if (typeof v !== 'number') return null
+      if (convKg.value && VARS[vn].units === 'kg' && area_m2.value) return v / area_m2.value
+      return v
     })
     return {
       type: 'line' as const,
       name: vn,
       data,
-      yAxisIndex: unitToAxisIdx.get(VARS[vn].units) ?? 0,
+      yAxisIndex: unitToAxisIdx.get(effUnit(vn)) ?? 0,
       symbol,
       symbolSize: 5,
       showSymbol,
@@ -216,7 +238,7 @@ function updateChart() {
           const weight = isActive ? '600' : '400'
           html += `<div style="color:${fg};font-weight:${weight};line-height:1.6">` +
             `<span style="color:${p.color}">● </span>` +
-            `${p.seriesName}: ${valStr} ${meta?.units ?? ''}` +
+            `${p.seriesName}: ${valStr} ${effUnit(p.seriesName as VarName)}` +
             `</div>`
         }
         return html
@@ -269,13 +291,21 @@ onMounted(async () => {
 
 watch(activeTab, loadActiveTab)
 watch(() => timeStore.currentIndex, updateChart)
+watch(isKgToMm, updateChart)
 </script>
 
 <template>
   <div class="modal-backdrop" @click.self="emit('close')">
     <div class="modal-box" :style="{ width: modalWidth + 'px' }">
       <div class="modal-head">
-        <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
+        <div class="modal-head-left">
+          <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
+          <button
+            v-if="anyKgVar && area_m2 !== null"
+            class="unit-toggle-btn"
+            @click="toggleUnit"
+          >{{ isKgToMm ? 'mm→kg' : 'kg→mm' }}</button>
+        </div>
         <button class="modal-close" @click="emit('close')">✕</button>
       </div>
 
@@ -341,7 +371,19 @@ watch(() => timeStore.currentIndex, updateChart)
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.625em 1em; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
 }
+.modal-head-left { display: flex; align-items: center; gap: 1.25em; }
 .modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); }
+.unit-toggle-btn {
+  background: none;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  padding: 0.125em 0.5em;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.unit-toggle-btn:hover { background: var(--accent-faint); }
 .modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
 

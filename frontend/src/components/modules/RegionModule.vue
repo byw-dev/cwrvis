@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRegionLayer, hoverInfo } from '@/composables/useRegionLayer'
-import { useGridLayer } from '@/composables/useGridLayer'
+import { useGridLayer, isKgToMm } from '@/composables/useGridLayer'
 import { useRegionStore } from '@/stores/region'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
@@ -30,16 +30,30 @@ async function maybeLoad() {
 onMounted(maybeLoad)
 watch([() => regionStore.selRegionId, () => timeStore.mode], maybeLoad)
 
-// ── Current value ─────────────────────────────────────────────────────────────
+// ── Current value（含 kg→mm 换算）────────────────────────────────────────────
 
-const currentValue = computed(() =>
-  regionStore.getValueAtIndex(
+const area_m2 = computed<number | null>(() =>
+  regionStore.selRegion?.area_m2 ?? null
+)
+
+const currentValue = computed(() => {
+  const raw = regionStore.getValueAtIndex(
     regionStore.selRegionId,
     timeStore.mode,
     timeStore.currentIndex,
     varStore.selVar,
   )
-)
+  if (raw === null) return null
+  if (isKgToMm.value && VARS[varStore.selVar]?.units === 'kg' && area_m2.value) {
+    return raw / area_m2.value
+  }
+  return raw
+})
+
+const currentUnit = computed(() => {
+  const base = VARS[varStore.selVar]?.units ?? ''
+  return isKgToMm.value && base === 'kg' && area_m2.value ? 'mm' : base
+})
 
 const frameLabel = computed(() => {
   const s = timeStore.sel
@@ -73,7 +87,7 @@ const frameLabel = computed(() => {
       :frame-label="frameLabel"
       :var-name="varStore.selVar"
       :value="currentValue"
-      :unit="VARS[varStore.selVar].units"
+      :unit="currentUnit"
       @clear="regionStore.selectRegion('xizang')"
       @history="showHistory = true"
     />

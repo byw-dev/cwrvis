@@ -34,6 +34,7 @@ export interface RegionMeta {
   region_id: RegionId
   name: string
   level: RegionLevel
+  area_m2?: number | null  // 区域有效面积（m²），由后端 region_areas 表提供，供 kg→mm 换算
 }
 
 // ─── Aggregation mode & timeline ─────────────────────────────────────────────
