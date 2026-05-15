@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from database import get_db
 from schemas import OkResponse
-from config import VALID_REGION_IDS
+from config import VALID_REGION_IDS, KG_VARS
 
 router = APIRouter()
 
@@ -27,6 +27,15 @@ def _var_columns(conn) -> list[str]:
 
 def _avg_select(var_cols: list[str]) -> str:
     return ", ".join(f"AVG({v}) AS {v}" for v in var_cols)
+
+
+def _season_step1_select(var_cols: list[str]) -> str:
+    """CTE 第一步：kg 列用 SUM，非 kg 列用 AVG，得到每年每季节的聚合值。"""
+    parts = []
+    for v in var_cols:
+        fn = "SUM" if v in KG_VARS else "AVG"
+        parts.append(f"{fn}({v}) AS {v}")
+    return ", ".join(parts)
 
 
 def _row_to_dict(row, var_cols: list[str], time_keys: list[str]) -> dict:
@@ -110,12 +119,22 @@ def _query(conn, granularity: str, region_id: str, year_start: int, year_end: in
         rows = conn.execute(sql, params_base).fetchall()
         return [_row_to_dict(r, var_cols, ["month"]) for r in rows]
 
-    # mean_season
+    # mean_season：两步聚合
+    # 第一步（CTE）：月→季，kg 列 SUM，非 kg 列 AVG，每年每季节一行
+    # 第二步（外层）：跨年取 AVG，GROUP BY season
     sql = f"""
-        SELECT {SEASON_CASE} AS season, {_avg_select(var_cols)}
-        FROM region_stats
-        WHERE region_id = ? AND granularity = 'month'
-          AND year BETWEEN ? AND ?
+        WITH season_per_year AS (
+            SELECT
+                year,
+                {SEASON_CASE} AS season,
+                {_season_step1_select(var_cols)}
+            FROM region_stats
+            WHERE region_id = ? AND granularity = 'month'
+              AND year BETWEEN ? AND ?
+            GROUP BY year, season
+        )
+        SELECT season, {_avg_select(var_cols)}
+        FROM season_per_year
         GROUP BY season
     """
     rows = conn.execute(sql, params_base).fetchall()

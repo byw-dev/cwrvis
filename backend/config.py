@@ -28,3 +28,10 @@ REGION_MAP: dict[str, dict[str, str]] = {
 }
 
 VALID_REGION_IDS = frozenset(REGION_MAP)
+
+# 单位为 kg 的变量（与 scripts/netcdf_to_sqlite.py 保持一致）
+# mean_season 聚合时这些列在月→季步骤用 SUM，其余列用 AVG
+KG_VARS: frozenset[str] = frozenset({
+    "SP", "aveMv", "aveMh", "INv", "OTv",
+    "INh", "OTh", "MC", "GMh", "GMv", "CWR",
+})
