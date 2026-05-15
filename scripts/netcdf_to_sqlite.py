@@ -10,6 +10,7 @@ netcdf × shape → SQLite 区域统计数据库。
 输出：
   {db_path}：SQLite 宽表
     region_stats(region_id, granularity, year, month, SP, aveMv, ..., RCh)
+    region_areas(region_id, area_m2)  ← 区域有效面积，供前端 kg→mm 换算
   仅存 granularity IN ('year','month') 的原始统计值；
   mean_all / mean_month / mean_season 由后端查询时用 SQL 实时计算。
 
@@ -76,6 +77,7 @@ class RegionAggregator(ABC):
     空间聚合策略接口。
     prepare() 每个区域调用一次（缓存权重/掩码，后续逐帧复用）。
     aggregate() 每帧每 var 调用一次，返回 float；区域内无有效格点时返回 None。
+    area_m2()  须在 prepare() 之后调用，返回区域有效面积（m²）。
     """
 
     @abstractmethod
@@ -88,6 +90,11 @@ class RegionAggregator(ABC):
 
     @abstractmethod
     def aggregate(self, frame_2d: np.ndarray, var_name: str) -> float | None: ...
+
+    @abstractmethod
+    def area_m2(self, dxy: np.ndarray) -> float:
+        """区域有效面积（m²），须在 prepare() 之后调用。"""
+        ...
 
 
 class AreaWeightedMean(RegionAggregator):
@@ -113,6 +120,10 @@ class AreaWeightedMean(RegionAggregator):
             return None
         return float(np.nansum(frame_2d * w) / total_w)
 
+    def area_m2(self, dxy: np.ndarray) -> float:
+        # _w[i,j] 为格点单元与区域的重叠面积（地理度²，单位格点面积=1.0，即重叠比例）
+        return float(np.nansum(dxy * self._w))
+
 
 class PointInBoundary(RegionAggregator):
     """
@@ -134,6 +145,9 @@ class PointInBoundary(RegionAggregator):
         if vals.size == 0:
             return None
         return float(np.sum(vals) if var_name in KG_VARS else np.mean(vals))
+
+    def area_m2(self, dxy: np.ndarray) -> float:
+        return float(np.nansum(dxy[self._mask]))
 
 
 AGGREGATORS: dict[str, type[RegionAggregator]] = {
@@ -172,12 +186,13 @@ def _scan_files(
 
 def _read_grid_meta(
     sample_path: Path,
-) -> tuple[list[float], list[float], list[str]]:
+) -> tuple[list[float], list[float], list[str], np.ndarray]:
     with xr.open_dataset(sample_path) as ds:
         lats = [float(v) for v in ds.coords["latitude"].values]
         lons = [float(v) for v in ds.coords["longitude"].values]
         var_names = [v for v in ds.data_vars if v not in EXCLUDE_VARS]
-    return lats, lons, var_names
+        dxy = ds["dxy"].values.astype(float)  # shape (lat, lon)，单位 m²
+    return lats, lons, var_names, dxy
 
 
 # --------------------------------------------------------------------------- #
@@ -263,11 +278,23 @@ CREATE TABLE region_stats (
 );
 CREATE INDEX idx_region_gran
     ON region_stats (region_id, granularity, year, month);
+CREATE TABLE region_areas (
+    region_id TEXT PRIMARY KEY,
+    area_m2   REAL NOT NULL
+);
 """
     conn = sqlite3.connect(db_path)
     conn.executescript(schema)
     conn.commit()
     return conn
+
+
+def _insert_areas(conn: sqlite3.Connection, areas: dict[str, float]) -> None:
+    conn.executemany(
+        "INSERT OR REPLACE INTO region_areas (region_id, area_m2) VALUES (?, ?)",
+        list(areas.items()),
+    )
+    conn.commit()
 
 
 def _insert_rows(
@@ -310,7 +337,7 @@ def main() -> None:
         sys.exit(f"ERROR: {args.nc_dir} 下未找到 nc 文件")
 
     sample = next(iter(yearly.values())) if yearly else next(iter(monthly.values()))
-    lats, lons, var_names = _read_grid_meta(sample)
+    lats, lons, var_names, dxy = _read_grid_meta(sample)
     print(
         f"grid: {len(lats)}×{len(lons)}  "
         f"vars({len(var_names)}): {var_names}\n"
@@ -339,11 +366,13 @@ def main() -> None:
     agg = AGGREGATORS[args.method]()
     fixed_cols = ["region_id", "granularity", "year", "month"]
     total_rows = 0
+    areas: dict[str, float] = {}
 
     print("\naggregating...")
     for region_id, region_geom in regions:
         print(f"  {region_id} — prepare...", end=" ", flush=True)
         agg.prepare(region_geom, lats, lons)
+        areas[region_id] = agg.area_m2(dxy)
         print("aggregate...", end=" ", flush=True)
 
         rows: list[dict] = []
@@ -374,11 +403,13 @@ def main() -> None:
         total_rows += len(rows)
         print(f"inserted {len(rows)} rows")
 
+    _insert_areas(conn, areas)
     conn.close()
     print(
         f"\ndone.  db={args.db_path}  "
         f"total rows={total_rows}  "
-        f"method={args.method}"
+        f"method={args.method}  "
+        f"areas written={len(areas)}"
     )
 
 

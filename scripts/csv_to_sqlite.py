@@ -9,6 +9,7 @@
 输出：
   {db_path}：SQLite 宽表
     region_stats(region_id, granularity, year, month, SP, aveMv, ..., RCh)
+    region_areas(region_id, area_m2)  ← 区域有效面积，供前端 kg→mm 换算
   仅存 granularity IN ('year','month') 的原始统计值；
   mean_all / mean_month / mean_season 由后端查询时用 SQL 实时计算。
 
@@ -56,6 +57,7 @@ def _init_db(db_path: Path) -> sqlite3.Connection:
     conn.executescript(f"""\
 DROP TABLE IF EXISTS region_stats;
 DROP INDEX IF EXISTS idx_region_gran;
+DROP TABLE IF EXISTS region_areas;
 CREATE TABLE region_stats (
     region_id   TEXT    NOT NULL,
     granularity TEXT    NOT NULL CHECK (granularity IN ('year','month')),
@@ -66,6 +68,10 @@ CREATE TABLE region_stats (
 );
 CREATE INDEX idx_region_gran
     ON region_stats (region_id, granularity, year, month);
+CREATE TABLE region_areas (
+    region_id TEXT PRIMARY KEY,
+    area_m2   REAL NOT NULL
+);
 """)
     conn.commit()
     return conn
@@ -93,11 +99,16 @@ def _parse_float(s: str) -> float | None:
     return float(s)
 
 
-def _load_csv(path: Path, region_id: str, granularity: str) -> list[dict]:
+def _load_csv(path: Path, region_id: str, granularity: str) -> tuple[list[dict], float | None]:
+    """返回 (rows, area_m2)。area_m2 从首行 dxy 列读取，同一区域内各行相同。"""
     rows = []
+    area_m2: float | None = None
     with path.open(encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for raw in reader:
+            if area_m2 is None:
+                area_m2 = _parse_float(raw.get("dxy", ""))
+
             # time 格式：YYYY-MM-DDT00:00:00，取日期部分的年和月
             date_part = raw["time"].split("T")[0]
             y, mo, _ = date_part.split("-")
@@ -113,7 +124,7 @@ def _load_csv(path: Path, region_id: str, granularity: str) -> list[dict]:
             for var in VAR_NAMES:
                 row[var] = _parse_float(raw.get(var, ""))
             rows.append(row)
-    return rows
+    return rows, area_m2
 
 
 # --------------------------------------------------------------------------- #
@@ -150,15 +161,25 @@ def main() -> None:
 
     # ---- 逐文件导入 ----
     total_rows = 0
+    areas: dict[str, float] = {}   # region_id → area_m2（每个区域只记一次）
     for path, region_id, granularity in all_files:
         print(f"  {path.name}", end=" ... ", flush=True)
-        rows = _load_csv(path, region_id, granularity)
+        rows, area_m2 = _load_csv(path, region_id, granularity)
         _insert_rows(conn, rows)
         total_rows += len(rows)
+        if area_m2 is not None and region_id not in areas:
+            areas[region_id] = area_m2
         print(f"{len(rows)} rows")
 
+    if areas:
+        conn.executemany(
+            "INSERT OR REPLACE INTO region_areas (region_id, area_m2) VALUES (?, ?)",
+            list(areas.items()),
+        )
+        conn.commit()
+
     conn.close()
-    print(f"\ndone.  db={args.db_path}  total rows={total_rows}")
+    print(f"\ndone.  db={args.db_path}  total rows={total_rows}  areas written={len(areas)}")
 
 
 if __name__ == "__main__":
