@@ -141,7 +141,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - CLAUDE.md 更新 Python 环境管理说明，反映两套独立 venv 的事实
   - `← needs: S-04`
 
-- [ ] `TODO` **S-08** `[S]` 色卡预设量程生成管线
+- [x] `DONE` **S-08** `[S]` 色卡预设量程生成管线
   - `data/colorbars/` 4 个 CSV 入 git（Year_Kg/mm、month_Kg/mm，小文件，视为配置数据）
   - `scripts/generate_colorbars.py`：读取 4 个 CSV → 过滤系统 15 个 var → 生成 `frontend/src/config/colorbars.ts`（嵌套结构 `COLORBAR_PRESETS[varName]['year'|'month']['kg'|'mm']`）
   - Makefile 新增 `make colorbars` target；`colorbars.ts` 也入 git（前端构建产物，小文件）
@@ -363,7 +363,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 居中卡片布局；RegionPicker + 年份下拉；下载按钮骨架
   - `← needs: F-06`
 
-- [ ] `TODO` **F-26** `[S]` 色卡量程模式（Enhancement）
+- [x] `DONE` **F-26** `[S]` 色卡量程模式（Enhancement）
   - 修复 BUG-20：`pendingKeys: Set<string>` 防止同一 frameKey 重复发送 Worker，消除 `{vmin:0, vmax:1}` 缓存污染
   - 删除 `legendPosition`（dead code：settings store、SettingsPanel、localStorage key）；图例固定右侧
   - settings store 新增 `scaleMode: 'auto' | 'preset'`（localStorage `cwrvis:scale_mode`）
