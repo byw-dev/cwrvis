@@ -17,15 +17,18 @@
 
 ---
 
-## BUG-15 · 点击格点图层边缘 0.5° 环返回 null
+## BUG-15 · 点击格点图层边缘 0.5° 环返回 null（左/顶不对称）
 
 **发现时间**：2026-05-16
 **严重程度**：Minor
 **重现步骤**：
-1. 点击格点图层最外侧 0.5° 区域（如 lon ∈ [75.0, 75.5)）
-2. 该点通过 `isInGridBounds` 检查（范围为 [75.0, 100.0]），但 `bilinearInterp` 计算得 gx < 0，直接 return null
+1. 点击格点图层**左侧** 0.5° 环（lon ∈ [75.0, 75.5)）或**顶部** 0.5° 环（lat ∈ (39.5, 40.0]）
+2. 该点通过 `isInGridBounds` 检查，但 `bilinearInterp` 计算得索引 < 0，直接 return null
 **期望行为**：边缘点击应钳制到最近格点，返回合理插值
-**实际行为**：hover / PinTip 取值显示为空
+**实际行为**：左侧和顶部边缘 hover / PinTip 取值显示为空；右侧和底部边缘正常（已有 Math.min 上界钳制）
+**根因补充**：`bilinearInterp` 第 14–15 行对上界（gx1/gy1）有 `Math.min` 钳制，但对下界（gx0/gy0）无对应处理。
+- 左侧：`lon=75.0` → `gx=(75.0−75.5)/1=−0.5` → `gx0=−1` → null
+- 顶部：`lat=40.0` → `gy=(40.0−39.5)/−1=−0.5` → `gy0=−1` → null
 **相关文件**：`frontend/src/utils/grid.ts:bilinearInterp`
 
 ---
@@ -79,3 +82,27 @@
 **实际行为**：若数据集时间跨度变化（如从 312 个月扩展或缩短），UI 上显示的帧数标注不会更新，且任何依赖该字段的逻辑也会出错
 **备注**：`avg_monthly: 12`（月平均按月分 12 组）和 `avg_season: 4`（季平均按季分 4 组）为领域常量，正确，不需修改
 **相关文件**：`frontend/src/components/modals/HistoryModal.vue:47-48`
+
+---
+
+## BUG-20 · 快速拖拽时间轴后色卡量程固定为 [0, 1]
+
+**发现时间**：2026-05-16
+**严重程度**：Major
+**重现步骤**：
+1. 加载任意变量（CWR、RCh、RCv 均可复现）
+2. 光标快速拖动时间轴滑块
+3. 观察右下角图例色卡的最大最小值 → 在某种情况下变为 `[0, 1]`
+**期望行为**：量程始终反映当前帧实际数据的值域
+**实际行为**：
+- 量程固定为 `[0, 1]`，持续到主动干预
+- 一旦触发，切换上一帧/下一帧后量程仍保持 `[0, 1]`
+- 点击换算为 mm 单位后量程恢复正常，再还原 kg 也正常；此后该帧及前后帧均恢复正常
+**根因**：`sendToWorker` 可对同一 `frameKey` 向 Worker 发送两次渲染请求：
+- `renderCurrent()`（cache miss）发送一次
+- 紧随其后的 `preload()` 仅检查 `imageCache`（已完成渲染），不检查 `pendingRanges`（正在渲染），误判"未渲染"后再发一次
+Worker 先后回应两次同一 `frameKey`：第一次响应从 `pendingRanges` 取到正确量程并 `.delete(frameKey)` 存入 imageCache；第二次响应 `pendingRanges.get(frameKey)` 返回 `undefined`，触发 `useGridLayer.ts:96` 的兜底 `{ vmin: 0, vmax: 1 }`，**覆盖** imageCache 中正确条目。此后该帧通过 `applyBitmap()` 每次都调用 `setRenderRange(0, 1)`，直到 `imageCache.clear()`（单位切换时触发）。
+**相关文件**：
+- `frontend/src/composables/useGridLayer.ts:96`（兜底 `{vmin:0, vmax:1}`）
+- `frontend/src/composables/useGridLayer.ts:216-227`（`preload` 未检查 pendingRanges）
+- `frontend/src/composables/useGridLayer.ts:198-214`（`renderCurrent` 与 preload 发送重复请求）
