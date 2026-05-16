@@ -18,20 +18,6 @@
 
 ---
 
-## BUG-19 · HistoryModal 逐月/逐年帧数硬编码
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：
-1. 查看 `frontend/src/components/modals/HistoryModal.vue` 第 47–48 行
-2. `TABS` 数组中 `monthly: frames: 312`、`yearly: frames: 26` 写死
-**期望行为**：帧数应从 metaStore 的时间元数据动态读取（数据集时间范围决定月帧数和年帧数）
-**实际行为**：若数据集时间跨度变化（如从 312 个月扩展或缩短），UI 上显示的帧数标注不会更新，且任何依赖该字段的逻辑也会出错
-**备注**：`avg_monthly: 12`（月平均按月分 12 组）和 `avg_season: 4`（季平均按季分 4 组）为领域常量，正确，不需修改
-**相关文件**：`frontend/src/components/modals/HistoryModal.vue:47-48`
-
----
-
 ## BUG-20 · 快速拖拽时间轴后色卡量程固定为 [0, 1]
 
 **发现时间**：2026-05-16

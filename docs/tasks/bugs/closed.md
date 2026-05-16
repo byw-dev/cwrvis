@@ -4,67 +4,6 @@
 
 ---
 
-## BUG-14 · `bilinearInterp` 格网参数硬编码
-
-**发现时间**：2026-05-16
-**严重程度**：Major
-**重现步骤**：
-1. 查看 `frontend/src/utils/grid.ts`
-2. `bilinearInterp` 内 `gy = (lat - 39.5) / -1`、`gx = (lon - 75.5) / 1` 写死原点和步长
-**期望行为**：从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态读取
-**实际行为**：换格网（不同分辨率或覆盖范围）时静默出错，不报异常
-**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/composables/useGridLayer.ts`（调用方）
-**出现原因**：初期开发时格网固定为 1°×1°，直接把起点坐标和步长硬编码在函数体内，未预留动态参数接口。
-**修复方案**：`bilinearInterp` 改为接收 `lats: number[], lons: number[]` 参数，步长从 `lons[1]-lons[0]` / `lats[1]-lats[0]` 动态计算，所有调用方同步传入 `metaStore.grid.lat/lon`。
-**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
-
----
-
-## BUG-15 · 点击格点图层边缘 0.5° 环返回 null（左/顶不对称）
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：
-1. 点击格点图层**左侧** 0.5° 环（lon ∈ [75.0, 75.5)）或**顶部** 0.5° 环（lat ∈ (39.5, 40.0]）
-2. 该点通过 `isInGridBounds` 检查，但 `bilinearInterp` 计算得索引 < 0，直接 return null
-**期望行为**：边缘点击应钳制到最近格点，返回合理插值
-**实际行为**：左侧和顶部边缘 hover / PinTip 取值显示为空；右侧和底部边缘正常
-**相关文件**：`frontend/src/utils/grid.ts:bilinearInterp`
-**出现原因**：旧实现对上界（gx1/gy1）有 `Math.min` 钳制，但对下界无对应 `Math.max`，导致左/顶半格单元内的点击产生负索引后直接返回 null，表现不对称。
-**修复方案**：在 floor 之前先将 gx/gy 钳制到 `[0, n-1]`（`gxc = Math.max(0, Math.min(nLon-1, gx))`），使外侧半格单元内的点击返回最近边缘格点的插值，而非 null。
-**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
-
----
-
-## BUG-16 · `isInGridBounds` 边界范围硬编码
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：查看 `frontend/src/utils/grid.ts` 顶部 `GRID_BOUNDS` 常量
-**期望行为**：边界范围从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态计算（格点中心 ± 半步长）
-**实际行为**：`{ latMin:25, latMax:40, lonMin:75, lonMax:100 }` 写死，换格网需手动同步
-**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/components/modules/GridModule.vue`（调用方）
-**出现原因**：与 BUG-14 同源，格网参数全部硬编码。
-**修复方案**：新增 `computeGridBounds(lats, lons)` 函数（格点中心 ± 半步长），`isInGridBounds` 改为接收 `lats/lons` 参数并调用 `computeGridBounds`；调用方传入 `metaStore.grid?.lat ?? []`。
-**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
-
----
-
-## BUG-17 · Canvas 尺寸硬编码且各向异性
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：查看 `useMap.ts`（`canvas.width = 600; canvas.height = 400`）和 `useGridLayer.ts`（`targetW: 600, targetH: 400`）
-**期望行为**：尺寸应由格网格点数动态计算：`width = nLon × k, height = nLat × k`，确保经纬向像素密度一致（各向同性）
-**实际行为**：600×400 = 3:2，实际格网 25×15 = 5:3，比例不符；经向约 24 px/格点，纬向约 26.7 px/格点
-**相关文件**：`frontend/src/composables/useMap.ts`，`frontend/src/composables/useGridLayer.ts`
-**出现原因**：Canvas 尺寸与 Worker targetW/targetH 均在开发期直接写死，未考虑格网比例与可变格网的情况。
-**修复方案**：新增 `computeGridScale(nLon, nLat)` 函数（`k = floor(sqrt(400000/(nLon*nLat)))`，钳制在 [10,48]），canvas 尺寸改为 `nLon×k × nLat×k`；Worker targetW/targetH 同步使用相同公式。Overlay 四角坐标改从 `computeGridBounds` 动态计算，meta 就绪后通过 `watch` + `setCoordinates` 自动修正竞态。当前格网（25×15）对应 k=32，canvas 800×480。
-**技术决策**：canvas 尺寸在 `initMap` 时确定后不可动态调整（MapLibre canvas source 限制）；meta 未就绪时使用与当前数据集匹配的 fallback 默认值（25×15），overlay 坐标支持事后更新。
-**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
-
----
-
 ## BUG-01 · 开发环境 CORS 导致格点/区域数据无法加载
 
 **发现时间**：2026-05-14（联调）
@@ -240,3 +179,81 @@
 **实际行为**：仅 1 位小数，如 `32.5°N 87.8°E`，精度不足
 **相关文件**：`frontend/src/components/map/HoverTooltip.vue:17`、`frontend/src/components/map/PinTip.vue:22`、`frontend/src/components/panels/Inspector.vue:24`
 **修复记录**：5e1746c — 三处 `toFixed(1)` 统一改为 `toFixed(3)`
+
+---
+
+## BUG-14 · `bilinearInterp` 格网参数硬编码
+
+**发现时间**：2026-05-16
+**严重程度**：Major
+**重现步骤**：
+1. 查看 `frontend/src/utils/grid.ts`
+2. `bilinearInterp` 内 `gy = (lat - 39.5) / -1`、`gx = (lon - 75.5) / 1` 写死原点和步长
+**期望行为**：从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态读取
+**实际行为**：换格网（不同分辨率或覆盖范围）时静默出错，不报异常
+**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/composables/useGridLayer.ts`（调用方）
+**出现原因**：初期开发时格网固定为 1°×1°，直接把起点坐标和步长硬编码在函数体内，未预留动态参数接口。
+**修复方案**：`bilinearInterp` 改为接收 `lats: number[], lons: number[]` 参数，步长从 `lons[1]-lons[0]` / `lats[1]-lats[0]` 动态计算，所有调用方同步传入 `metaStore.grid.lat/lon`。
+**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
+
+---
+
+## BUG-15 · 点击格点图层边缘 0.5° 环返回 null（左/顶不对称）
+
+**发现时间**：2026-05-16
+**严重程度**：Minor
+**重现步骤**：
+1. 点击格点图层**左侧** 0.5° 环（lon ∈ [75.0, 75.5)）或**顶部** 0.5° 环（lat ∈ (39.5, 40.0]）
+2. 该点通过 `isInGridBounds` 检查，但 `bilinearInterp` 计算得索引 < 0，直接 return null
+**期望行为**：边缘点击应钳制到最近格点，返回合理插值
+**实际行为**：左侧和顶部边缘 hover / PinTip 取值显示为空；右侧和底部边缘正常
+**相关文件**：`frontend/src/utils/grid.ts:bilinearInterp`
+**出现原因**：旧实现对上界（gx1/gy1）有 `Math.min` 钳制，但对下界无对应 `Math.max`，导致左/顶半格单元内的点击产生负索引后直接返回 null，表现不对称。
+**修复方案**：在 floor 之前先将 gx/gy 钳制到 `[0, n-1]`（`gxc = Math.max(0, Math.min(nLon-1, gx))`），使外侧半格单元内的点击返回最近边缘格点的插值，而非 null。
+**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
+
+---
+
+## BUG-16 · `isInGridBounds` 边界范围硬编码
+
+**发现时间**：2026-05-16
+**严重程度**：Minor
+**重现步骤**：查看 `frontend/src/utils/grid.ts` 顶部 `GRID_BOUNDS` 常量
+**期望行为**：边界范围从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态计算（格点中心 ± 半步长）
+**实际行为**：`{ latMin:25, latMax:40, lonMin:75, lonMax:100 }` 写死，换格网需手动同步
+**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/components/modules/GridModule.vue`（调用方）
+**出现原因**：与 BUG-14 同源，格网参数全部硬编码。
+**修复方案**：新增 `computeGridBounds(lats, lons)` 函数（格点中心 ± 半步长），`isInGridBounds` 改为接收 `lats/lons` 参数并调用 `computeGridBounds`；调用方传入 `metaStore.grid?.lat ?? []`。
+**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
+
+---
+
+## BUG-17 · Canvas 尺寸硬编码且各向异性
+
+**发现时间**：2026-05-16
+**严重程度**：Minor
+**重现步骤**：查看 `useMap.ts`（`canvas.width = 600; canvas.height = 400`）和 `useGridLayer.ts`（`targetW: 600, targetH: 400`）
+**期望行为**：尺寸应由格网格点数动态计算：`width = nLon × k, height = nLat × k`，确保经纬向像素密度一致（各向同性）
+**实际行为**：600×400 = 3:2，实际格网 25×15 = 5:3，比例不符；经向约 24 px/格点，纬向约 26.7 px/格点
+**相关文件**：`frontend/src/composables/useMap.ts`，`frontend/src/composables/useGridLayer.ts`
+**出现原因**：Canvas 尺寸与 Worker targetW/targetH 均在开发期直接写死，未考虑格网比例与可变格网的情况。
+**修复方案**：新增 `computeGridScale(nLon, nLat)` 函数（`k = floor(sqrt(400000/(nLon*nLat)))`，钳制在 [10,48]），canvas 尺寸改为 `nLon×k × nLat×k`；Worker targetW/targetH 同步使用相同公式。Overlay 四角坐标改从 `computeGridBounds` 动态计算，meta 就绪后通过 `watch` + `setCoordinates` 自动修正竞态。当前格网（25×15）对应 k=32，canvas 800×480。
+**技术决策**：canvas 尺寸在 `initMap` 时确定后不可动态调整（MapLibre canvas source 限制）；meta 未就绪时使用与当前数据集匹配的 fallback 默认值（25×15），overlay 坐标支持事后更新。
+**修复记录**：6fe1c95 — fix(frontend): BUG-14 BUG-15 BUG-16 BUG-17 格点坐标动态化与 canvas 各向同性
+
+---
+
+## BUG-19 · HistoryModal 逐月/逐年帧数硬编码
+
+**发现时间**：2026-05-16
+**严重程度**：Minor
+**重现步骤**：
+1. 查看 `frontend/src/components/modals/HistoryModal.vue` 第 47–48 行
+2. `TABS` 数组中 `monthly: frames: 312`、`yearly: frames: 26` 写死
+**期望行为**：帧数应从 metaStore 的时间元数据动态读取
+**实际行为**：数据集时间跨度变化时，UI 帧数标注不会更新
+**备注**：`avg_monthly: 12` 和 `avg_season: 4` 为领域常量，正确，不修改
+**相关文件**：`frontend/src/components/modals/HistoryModal.vue:47-48`
+**出现原因**：TABS 以 const 数组定义，帧数在模块初始化时即固化，未接入响应式数据源。
+**修复方案**：将 `const TABS` 改为 `computed`，monthly/yearly 的 `frames` 字段分别取 `metaStore.timeline?.month.length` 和 `year.length`；脚本中三处 `.find()` 改为 `.value.find()`，模板无需改动（computed 自动展开）。
+**修复记录**：ef3c7f8 — fix(frontend): BUG-19 HistoryModal tab 帧数从 metaStore.timeline 动态读取
