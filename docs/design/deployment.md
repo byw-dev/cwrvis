@@ -234,3 +234,103 @@ tail -f /opt/cwrvis/logs/app.log
 # systemd 方式
 journalctl -u cwrvis -f
 ```
+
+---
+
+## 网络配置
+
+### 方案 A：直接暴露端口（内网演示 / 临时）
+
+直接开放 8000 端口，无需额外组件：
+
+```bash
+# Ubuntu UFW 防火墙
+sudo ufw allow 8000/tcp
+sudo ufw reload
+```
+
+访问地址：`http://<server-ip>:8000`
+
+**适用场景**：内网环境、甲方验收演示（无 HTTPS 要求）。
+
+---
+
+### 方案 B：Nginx 反向代理 + HTTPS（推荐生产环境）
+
+FastAPI 监听本地 8000，Nginx 负责 HTTPS 终止和端口转发：
+
+```nginx
+# /etc/nginx/sites-available/cwrvis
+server {
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    # 格点 JSON 大文件（最大约 2MB）
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+```bash
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/cwrvis /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# 申请免费证书（需域名已解析）
+sudo certbot --nginx -d example.com
+```
+
+> **注意**：使用 Nginx 后 `config.env` 中的 `PORT` 保持 8000（仅本地监听），防火墙**只开放 80/443**，关闭 8000 对外访问。
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw deny 8000/tcp
+sudo ufw reload
+```
+
+---
+
+### 防火墙端口汇总
+
+| 端口 | 用途 | 方案 A | 方案 B |
+|------|------|--------|--------|
+| 22 | SSH | 开放 | 开放 |
+| 80 | HTTP（重定向） | 可选 | 开放 |
+| 443 | HTTPS | — | 开放 |
+| 8000 | FastAPI（直接访问） | 开放 | **关闭** |
+
+---
+
+### 常见问题
+
+**启动后无法访问**
+1. 检查进程：`cat /opt/cwrvis/logs/app.pid` → `ps aux | grep uvicorn`
+2. 检查端口：`ss -tlnp | grep 8000`
+3. 检查防火墙：`sudo ufw status`
+4. 检查日志：`tail -50 /opt/cwrvis/logs/app.log`
+
+**依赖安装失败（离线环境）**
+- 确认 `app/wheels/` 目录非空：`ls /opt/cwrvis/app/wheels/ | wc -l`（应有数十个文件）
+- 若 wheels 不完整，在有网络的机器重新 `make package` 后上传
+
+**重启后服务未自动启动**
+- 确认 systemd 已启用：`sudo systemctl is-enabled cwrvis`
+- 若未启用：`sudo systemctl enable cwrvis`

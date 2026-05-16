@@ -1,0 +1,16 @@
+[Unit]
+Description=cwrvis Web Service
+After=network.target
+
+[Service]
+Type=forking
+User=www-data
+WorkingDirectory=/opt/cwrvis
+ExecStart=/opt/cwrvis/bin/start.sh
+ExecStop=/opt/cwrvis/bin/stop.sh
+PIDFile=/opt/cwrvis/logs/app.pid
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

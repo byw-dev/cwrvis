@@ -438,11 +438,11 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 打包通过根目录 `Makefile` 的 `make package` target 完成（前置：`make setup`）
   - `← needs: S-03, S-04, S-05, B-01~B-04, F-01~F-19`
 
-- [ ] `TODO` **D-02** `[S]` systemd service 配置
+- [x] `DONE` **D-02** `[S]` systemd service 配置
   - `deploy/systemd/cwrvis.service`：`WorkingDirectory`、`ExecStart`（绝对路径 `bin/start.sh`）、`Restart=on-failure`、`RestartSec=5`
   - `← needs: D-01`
 
-- [ ] `TODO` **D-03** `[S]` 网络配置说明（`docs/design/deployment.md` 更新）
+- [x] `DONE` **D-03** `[S]` 网络配置说明（`docs/design/deployment.md` 更新）
   - 直连方案：uvicorn 直接监听 0.0.0.0:8000，无 Nginx
   - 可选 Nginx 反代：upstream 配置模板，静态文件 `/grid/` 走 Nginx 直出
   - HTTPS：Let's Encrypt certbot 配置示例
