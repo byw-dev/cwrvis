@@ -4,59 +4,6 @@
 
 ---
 
-## BUG-14 · `bilinearInterp` 格网参数硬编码
-
-**发现时间**：2026-05-16
-**严重程度**：Major
-**重现步骤**：
-1. 查看 `frontend/src/utils/grid.ts`
-2. `bilinearInterp` 内 `gy = (lat - 39.5) / -1`、`gx = (lon - 75.5) / 1` 写死原点和步长
-**期望行为**：从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态读取
-**实际行为**：换格网（不同分辨率或覆盖范围）时静默出错，不报异常
-**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/composables/useGridLayer.ts`（调用方）
-
----
-
-## BUG-15 · 点击格点图层边缘 0.5° 环返回 null（左/顶不对称）
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：
-1. 点击格点图层**左侧** 0.5° 环（lon ∈ [75.0, 75.5)）或**顶部** 0.5° 环（lat ∈ (39.5, 40.0]）
-2. 该点通过 `isInGridBounds` 检查，但 `bilinearInterp` 计算得索引 < 0，直接 return null
-**期望行为**：边缘点击应钳制到最近格点，返回合理插值
-**实际行为**：左侧和顶部边缘 hover / PinTip 取值显示为空；右侧和底部边缘正常（已有 Math.min 上界钳制）
-**根因补充**：`bilinearInterp` 第 14–15 行对上界（gx1/gy1）有 `Math.min` 钳制，但对下界（gx0/gy0）无对应处理。
-- 左侧：`lon=75.0` → `gx=(75.0−75.5)/1=−0.5` → `gx0=−1` → null
-- 顶部：`lat=40.0` → `gy=(40.0−39.5)/−1=−0.5` → `gy0=−1` → null
-**相关文件**：`frontend/src/utils/grid.ts:bilinearInterp`
-
----
-
-## BUG-16 · `isInGridBounds` 边界范围硬编码
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：查看 `frontend/src/utils/grid.ts` 顶部 `GRID_BOUNDS` 常量
-**期望行为**：边界范围从 `metaStore.grid.lat` / `metaStore.grid.lon` 动态计算（格点中心 ± 半步长）
-**实际行为**：`{ latMin:25, latMax:40, lonMin:75, lonMax:100 }` 写死，换格网需手动同步
-**相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/components/modules/GridModule.vue`（调用方）
-
----
-
-## BUG-17 · Canvas 尺寸硬编码且各向异性
-
-**发现时间**：2026-05-16
-**严重程度**：Minor
-**重现步骤**：查看 `useMap.ts`（`canvas.width = 600; canvas.height = 400`）和 `useGridLayer.ts`（`targetW: 600, targetH: 400`）
-**期望行为**：尺寸应由格网格点数动态计算：`width = nLon × k, height = nLat × k`，确保经纬向像素密度一致（各向同性）
-**实际行为**：
-- 600×400 = 3:2，而实际格网覆盖 25°×15° = 5:3，比例不符
-- 经向约 24 像素/格点，纬向约 26.7 像素/格点，双线性插值各向异性
-**相关文件**：`frontend/src/composables/useMap.ts`，`frontend/src/composables/useGridLayer.ts`
-
----
-
 ## BUG-18 · `bilinearInterp` 坐标映射与 Canvas 渲染不一致
 
 **发现时间**：2026-05-16
