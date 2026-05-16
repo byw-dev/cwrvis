@@ -6,16 +6,32 @@ export function isInGridBounds(lat: number, lon: number): boolean {
     && lon >= GRID_BOUNDS.lonMin && lon <= GRID_BOUNDS.lonMax
 }
 
-// 双线性插值：格点 lat 39.5→25.5（步长 -1），lon 75.5→99.5（步长 +1）
-export function bilinearInterp(frame2d: (number | null)[][], lat: number, lon: number): number | null {
-  const gy = (lat - 39.5) / -1
-  const gx = (lon - 75.5) /  1
+// 双线性插值。lats/lons 为格点坐标数组（等间距，lats 由北向南递减）。
+// 落在格点范围外的半格单元（canvas 扩边区域）内的点，钳至最近格点后插值，不返回 null。
+export function bilinearInterp(
+  frame2d: (number | null)[][],
+  lat: number,
+  lon: number,
+  lats: number[],
+  lons: number[],
+): number | null {
+  const nLon = lons.length, nLat = lats.length
+  if (nLon < 2 || nLat < 2) return null
 
-  const gy0 = Math.floor(gy), gy1 = Math.min(gy0 + 1, frame2d.length - 1)
-  const gx0 = Math.floor(gx), gx1 = Math.min(gx0 + 1, (frame2d[0]?.length ?? 1) - 1)
-  if (gy0 < 0 || gx0 < 0) return null
+  const lonStep = lons[1] - lons[0]  // > 0
+  const latStep = lats[1] - lats[0]  // < 0（北→南递减）
 
-  const ty = gy - gy0, tx = gx - gx0
+  const gx = (lon - lons[0]) / lonStep
+  const gy = (lat - lats[0]) / latStep
+
+  // 钳制到 [0, n-1]：让外侧半格单元内的点击返回边缘格点的插值而非 null
+  const gxc = Math.max(0, Math.min(nLon - 1, gx))
+  const gyc = Math.max(0, Math.min(nLat - 1, gy))
+
+  const gx0 = Math.floor(gxc), gx1 = Math.min(gx0 + 1, nLon - 1)
+  const gy0 = Math.floor(gyc), gy1 = Math.min(gy0 + 1, nLat - 1)
+  const tx = gxc - gx0, ty = gyc - gy0
+
   let wSum = 0, vSum = 0
   const corners = [
     [gy0, gx0, (1 - tx) * (1 - ty)],

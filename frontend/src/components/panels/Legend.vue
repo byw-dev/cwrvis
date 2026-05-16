@@ -6,6 +6,7 @@ import { useTimeStore } from '@/stores/time'
 import { VARS } from '@/config/vars'
 import { getLut } from '@/utils/colormap'
 import { isKgToMm } from '@/composables/useGridLayer'
+import { showContour } from '@/composables/useContourLayer'
 import type { ColormapName } from '@/types'
 
 const varStore  = useVarStore()
@@ -134,6 +135,11 @@ watch([cmName, () => varStore.selVar], drawGradient)
       </button>
     </div>
 
+    <!-- Overlay toggles -->
+    <div class="overlay-row">
+      <button class="overlay-btn" :class="{ active: showContour }" @click="showContour = !showContour">等值线</button>
+    </div>
+
     <!-- Threshold -->
     <div class="thresh-row">
       <input
@@ -219,6 +225,24 @@ watch([cmName, () => varStore.selVar], drawGradient)
   line-height: 0;
 }
 .cm-swatch.active { border-color: var(--accent); }
+
+.overlay-row {
+  display: flex;
+  gap: 0.375em;
+  margin-bottom: 0.375em;
+}
+.overlay-btn {
+  background: none;
+  border: 1px solid var(--line-2);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  padding: 0.2em 0.5em;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.overlay-btn:hover { color: var(--fg-1); border-color: var(--fg-3); }
+.overlay-btn.active { color: var(--accent); border-color: var(--accent); }
 
 .thresh-row {
   display: flex;

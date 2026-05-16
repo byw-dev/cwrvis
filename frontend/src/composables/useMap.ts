@@ -1,8 +1,20 @@
 import { shallowRef, shallowReadonly, watch } from 'vue'
 import maplibregl, { type Map as MaplibreMap, type CanvasSource, type RasterTileSource } from 'maplibre-gl'
 import { useSettingsStore } from '@/stores/settings'
+import { useMetaStore } from '@/stores/meta'
 import { BASEMAPS } from '@/config/basemaps'
 import type { BasemapConfig } from '@/types'
+
+// 根据格网格点数计算画布整数倍率：保持各向同性（nLon:nLat 比例），总像素不超过上限。
+// 同一公式在 useGridLayer 中复用，确保 canvas 尺寸与 Worker targetW/targetH 始终一致。
+const MAX_CANVAS_PIXELS = 400_000
+const MIN_GRID_SCALE    = 10
+const MAX_GRID_SCALE    = 48
+
+export function computeGridScale(nLon: number, nLat: number): number {
+  const k = Math.floor(Math.sqrt(MAX_CANVAS_PIXELS / (nLon * nLat)))
+  return Math.max(MIN_GRID_SCALE, Math.min(MAX_GRID_SCALE, k))
+}
 
 // 格点覆盖层的四角坐标（[tl, tr, br, bl]，MapLibre 顺序）
 // 格点原始边界：lon 75–100°E, lat 25–40°N（外扩 0.5° 覆盖边缘格点单元）
@@ -29,12 +41,17 @@ export function useMap() {
   function initMap(container: HTMLElement): void {
     if (_map.value) return  // 已初始化，不重复创建
 
-    const basemap = BASEMAPS[settings.basemap]
+    const basemap   = BASEMAPS[settings.basemap]
+    const metaStore = useMetaStore()
+    const nLon = metaStore.grid?.lon.length ?? 25
+    const nLat = metaStore.grid?.lat.length ?? 15
+    const k    = computeGridScale(nLon, nLat)
 
-    // 与 Worker targetW/targetH 保持一致；须挂载到 DOM，MapLibre canvas source 才能正常读取
+    // 尺寸 = 格点数 × 倍率，保持 nLon:nLat 各向同性比例。
+    // 须挂载到 DOM，MapLibre canvas source 才能正常读取。
     const canvas = document.createElement('canvas')
-    canvas.width  = 600
-    canvas.height = 400
+    canvas.width  = nLon * k
+    canvas.height = nLat * k
     canvas.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none'
     document.body.appendChild(canvas)
     _gridCanvas.value = canvas

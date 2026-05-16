@@ -1,5 +1,5 @@
 import { ref, watch, shallowRef, onUnmounted, toRaw } from 'vue'
-import { useMap } from './useMap'
+import { useMap, computeGridScale } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
@@ -18,7 +18,10 @@ type FrameData = { imageData: ImageData; vmin: number; vmax: number }
 const GRID_BASE = (import.meta.env.VITE_GRID_BASE as string | undefined) ?? '/grid'
 
 // 每次帧渲染完毕（applyBitmap）时递增，供外部 watch 数据就绪
-const renderTick = shallowRef(0)
+export const renderTick = shallowRef(0)
+
+// 当前帧原始二维数据，供等值线/高低点层读取（未做 kg→mm 换算）
+export const currentFrame2D = shallowRef<(number | null)[][] | null>(null)
 
 // 模块级懒加载接口，供 HistoryModal 按需获取任意 var+mode 的帧数据
 export async function fetchGridFrames(
@@ -172,13 +175,17 @@ export function useGridLayer() {
     const fk = frameKey(varName, mode, idx)
     pendingRanges.set(fk, { vmin, vmax })
 
+    const nLon = metaStore.grid?.lon.length ?? 25
+    const nLat = metaStore.grid?.lat.length ?? 15
+    const k    = computeGridScale(nLon, nLat)
+
     const req: RenderRequest = {
       frame2d,
       lut,
       vmin,
       vmax,
-      targetW:  600,
-      targetH:  400,
+      targetW:  nLon * k,
+      targetH:  nLat * k,
       frameKey: fk,
       ...(needConvert && dxy ? { dxy, convertToMm: true } : {}),
     }
@@ -202,13 +209,20 @@ export function useGridLayer() {
     const key     = frameKey(varName, mode, idx)
 
     const cached = imageCache.get(key)
-    if (cached) { applyBitmap(cached); preload(varName, mode, idx); return }
+    if (cached) {
+      const rawData = jsonCache.get(cacheKey(varName, mode))
+      if (rawData?.[idx]) currentFrame2D.value = rawData[idx]
+      applyBitmap(cached)
+      preload(varName, mode, idx)
+      return
+    }
 
     const data = await loadJson(varName, mode)
     if (!data) return
     const frame = data[idx]
     if (!frame) return
 
+    currentFrame2D.value = frame
     sendToWorker(frame, varName, mode, idx)
     preload(varName, mode, idx)
   }
@@ -259,15 +273,17 @@ export function useGridLayer() {
 
   // 获取当前帧在 (lat, lon) 处的插值，供 hover/click 使用
   function getValueAt(lat: number, lon: number): number | null {
+    const grid = metaStore.grid
+    if (!grid) return null
     const data = jsonCache.get(cacheKey(varStore.selVar, timeStore.mode))
     const frame = data?.[timeStore.currentIndex]
     if (!frame) return null
-    const val = bilinearInterp(frame, lat, lon)
+    const val = bilinearInterp(frame, lat, lon, grid.lat, grid.lon)
     if (val === null) return null
     if (isKgToMm.value && VARS[varStore.selVar]?.units === 'kg') {
-      const dxy = metaStore.grid?.dxy
+      const dxy = grid.dxy
       if (dxy) {
-        const dxyVal = bilinearInterp(dxy as (number | null)[][], lat, lon)
+        const dxyVal = bilinearInterp(dxy as (number | null)[][], lat, lon, grid.lat, grid.lon)
         return dxyVal && dxyVal > 0 ? val / dxyVal : null
       }
     }

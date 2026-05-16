@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useMap } from '@/composables/useMap'
-import { useGridLayer, isKgToMm } from '@/composables/useGridLayer'
+import { useGridLayer, isKgToMm, renderTick } from '@/composables/useGridLayer'
+import { useContourLayer } from '@/composables/useContourLayer'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import HoverTooltip from '@/components/map/HoverTooltip.vue'
@@ -14,7 +15,8 @@ import type { AggMode, VarName } from '@/types'
 // fetchFrames 已从 useGridLayer return 中移除，历史数据由 HistoryModal 懒加载
 
 const { map }                         = useMap()
-const { getValueAt, renderTick }      = useGridLayer()
+const { getValueAt }                  = useGridLayer()
+useContourLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
 
