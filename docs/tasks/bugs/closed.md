@@ -257,3 +257,20 @@
 **出现原因**：TABS 以 const 数组定义，帧数在模块初始化时即固化，未接入响应式数据源。
 **修复方案**：将 `const TABS` 改为 `computed`，monthly/yearly 的 `frames` 字段分别取 `metaStore.timeline?.month.length` 和 `year.length`；脚本中三处 `.find()` 改为 `.value.find()`，模板无需改动（computed 自动展开）。
 **修复记录**：ef3c7f8 — fix(frontend): BUG-19 HistoryModal tab 帧数从 metaStore.timeline 动态读取
+
+---
+
+## BUG-20 · 快速拖拽时间轴后色卡量程固定为 [0, 1]
+
+**发现时间**：2026-05-16
+**严重程度**：Major
+**重现步骤**：
+1. 加载任意变量（CWR、RCh、RCv 均可复现）
+2. 光标快速拖动时间轴滑块
+3. 观察右下角图例色卡的最大最小值 → 在某种情况下变为 `[0, 1]`
+**期望行为**：量程始终反映当前帧实际数据的值域
+**实际行为**：量程固定为 `[0, 1]`，持续到主动干预（切换单位可临时恢复）
+**相关文件**：`frontend/src/composables/useGridLayer.ts`
+**出现原因**：`sendToWorker` 对同一 `frameKey` 可能被 `renderCurrent()` 和 `preload()` 各投递一次（preload 仅检查 `imageCache` 是否存在，不检查是否正在渲染）。第一次 Worker 响应正常写入 `imageCache` 并删除 `pendingRanges` 条目；第二次响应时条目已被删，回退到兜底 `{vmin:0, vmax:1}`，覆盖了正确缓存。
+**修复方案**：新增模块级 `pendingKeys: Set<string>`，`sendToWorker` 投递前若 key 已在集合中则直接 return；投递后加入集合，Worker 响应后移除。`imageCache.clear()` 时同步清空 `pendingKeys` 和 `pendingRanges`。
+**修复记录**：bf660cb — fix(frontend): BUG-20 pendingKeys Set 防止重复渲染污染 imageCache
