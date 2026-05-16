@@ -53,6 +53,7 @@ cwrvis/
 ├── data/
 │   ├── nc/                    # netcdf 原始数据（gitignored，由甲方提供）
 │   ├── docx/                  # 预生成报告文档（gitignored，由甲方提供；make data-reports 复制至 static/reports/）
+│   ├── colorbars/             # 各变量色卡量程统计 CSV（在 git 中；make colorbars 生成 frontend/src/config/colorbars.ts）
 │   │   └── {region_id}/       # 每区域一子目录，如 lasa/、xizang/ 等
 │   │       ├── {YYYY}-Year_Evaluation_Report-{region_id}.docx
 │   │       └── Multi-Year_Evaluation_Report-{region_id}.docx
