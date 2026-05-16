@@ -22,7 +22,7 @@ DIST_DIR     := dist/cwrvis-$(VERSION)
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 
-.PHONY: all setup data data-grid data-sqlite data-sqlite-csv data-reports shapes frontend dev package clean help
+.PHONY: all setup data data-grid data-sqlite data-sqlite-csv data-reports colorbars shapes frontend dev package clean help
 
 # ---------------------------------------------------------------------------- #
 # 默认目标                                                                       #
@@ -48,6 +48,10 @@ setup:  ## 初始化所有开发环境（首次 clone 后运行一次即可）
 # ---------------------------------------------------------------------------- #
 
 data: data-grid data-sqlite-csv shapes data-reports  ## 全部离线数据（grid + sqlite-csv + shapes + reports）
+
+colorbars:  ## data/colorbars/ CSV → frontend/src/config/colorbars.ts（色卡预设量程）
+	uv run --project scripts python scripts/generate_colorbars.py
+	@echo "==> 请将生成的 colorbars.ts 一并 commit 到 git"
 
 data-reports:  ## 报告文档 → static/reports/（保留子目录，需先准备 data/docx/）
 	@test -d data/docx || (echo "ERROR: data/docx/ 目录不存在，请先将甲方提供的报告文档放入该目录"; exit 1)
@@ -190,6 +194,7 @@ help:  ## 显示此帮助
 	@echo "  make data-sqlite-csv         路径 B: CSV 导入    →  db/stats.db（默认）"
 	@echo "  make data-sqlite             路径 A: netcdf 聚合 →  db/stats.db"
 	@echo "  make data-sqlite METHOD=point_in_boundary"
+	@echo "  make colorbars               CSV 量程 → frontend/src/config/colorbars.ts"
 	@echo "  make data-reports            报告文档复制     →  static/reports/"
 	@echo "  make shapes                  GeoJSON 重命名   →  static/shapes/"
 	@echo ""
