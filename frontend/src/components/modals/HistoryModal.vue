@@ -43,12 +43,12 @@ const effectiveUnit = computed(() =>
 
 function toggleUnit(): void { isKgToMm.value = !isKgToMm.value }
 
-const TABS: { key: TabKey; label: string; mode: AggMode; frames: number }[] = [
-  { key: 'monthly',     label: '逐月',   mode: 'monthly',     frames: 312 },
-  { key: 'yearly',      label: '逐年',   mode: 'yearly',      frames: 26  },
-  { key: 'avg_monthly', label: '月平均', mode: 'avg_monthly', frames: 12  },
-  { key: 'avg_season',  label: '季平均', mode: 'avg_season',  frames: 4   },
-]
+const TABS = computed(() => [
+  { key: 'monthly'     as TabKey, label: '逐月',   mode: 'monthly'     as AggMode, frames: metaStore.timeline?.month.length ?? 312 },
+  { key: 'yearly'      as TabKey, label: '逐年',   mode: 'yearly'      as AggMode, frames: metaStore.timeline?.year.length  ?? 26  },
+  { key: 'avg_monthly' as TabKey, label: '月平均', mode: 'avg_monthly' as AggMode, frames: 12 },
+  { key: 'avg_season'  as TabKey, label: '季平均', mode: 'avg_season'  as AggMode, frames: 4  },
+])
 
 const activeTab = ref<TabKey>(props.initialTab ?? 'monthly')
 const chartEl   = ref<HTMLDivElement>()
@@ -65,7 +65,7 @@ async function loadTab(tab: TabKey): Promise<void> {
   if (props.mode !== 'grid' || !props.varName) return
 
   tabLoading.value = { ...tabLoading.value, [tab]: true }
-  const mode = TABS.find(t => t.key === tab)!.mode
+  const mode = TABS.value.find(t => t.key === tab)!.mode
   const data = await fetchGridFrames(props.varName, mode)
   if (data) tabData.value = { ...tabData.value, [tab]: data }
   tabLoading.value = { ...tabLoading.value, [tab]: false }
@@ -79,7 +79,7 @@ function seriesData(tab: TabKey): { labels: string[]; values: (number | null)[] 
   const frames = tabData.value[tab]
   if (!frames) return { labels: [], values: [] }
 
-  const mode  = TABS.find(t => t.key === tab)!.mode
+  const mode  = TABS.value.find(t => t.key === tab)!.mode
   const items = buildItems(mode)
 
   // kg→mm：dxy 值对该点插值一次，312 帧共用
@@ -105,7 +105,7 @@ function seriesData(tab: TabKey): { labels: string[]; values: (number | null)[] 
 
 const currentMarkLine = computed(() => {
   const tab  = activeTab.value
-  const mode = TABS.find(t => t.key === tab)!.mode
+  const mode = TABS.value.find(t => t.key === tab)!.mode
   const items = buildItems(mode)
   const idx = items.findIndex(it => {
     const s = timeStore.sel
