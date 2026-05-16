@@ -164,6 +164,29 @@ backend/
 
 ---
 
+### GET `/api/v1/report/meta`
+
+返回报告目录元数据：每个区域有哪些年份的报告实际存在于 `static/reports/`。
+供前端导出模块初始化时调用，驱动区域和年份选项的渲染。
+
+**实现说明**：
+- 后端启动时扫描一次 `REPORT_DIR` 目录，结果缓存在模块级变量，运行期不重扫
+- 只返回文件实际存在的条目，防止前端展示有名无实的选项
+
+**响应**：
+```json
+{
+  "ok": true,
+  "data": {
+    "xizang": { "name": "西藏自治区", "level": "province",   "years": [2000, 2001, "...", 2025], "has_multi": true },
+    "lasa":   { "name": "拉萨市",     "level": "prefecture", "years": [2000, "...", 2025],        "has_multi": true }
+  }
+}
+```
+`years` 为整数列表，`has_multi` 表示是否存在多年汇总报告。
+
+---
+
 ### GET `/api/v1/report/download`
 
 下载预生成的报告文件。
@@ -172,26 +195,35 @@ backend/
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `region_id` | string | ✅ | 区域标识符 |
-| `granularity` | string | ✅ | `year` 或 `month` |
-| `start` | string | ✅ | 年颗粒度传年份字符串如 `2000`；月颗粒度传 `2000_01` |
-| `end` | string | ✅ | 同上 |
+| `region_id` | string | ✅ | 区域标识符，必须在 `VALID_REGION_IDS` 白名单中 |
+| `year` | string | ✅ | 四位年份字符串（`"2000"`～`"2025"`）或 `"multi"` |
 
-**文件命名规则**：
+**文件命名规则**（后端确定性拼接，不依赖用户输入直接构造路径）：
 ```python
-filename = f"{region_id}_{granularity}_{start}_{end}.docx"
-filepath = REPORT_DIR / filename
-# 示例：region_a_year_2000_2024.docx
-#        region_b_month_2020_01_2023_12.docx
+# year 为四位数字
+filename = f"{year}-Year_Evaluation_Report-{region_id}.docx"
+# year 为 "multi"
+filename = f"Multi-Year_Evaluation_Report-{region_id}.docx"
+
+filepath = Path(REPORT_DIR) / region_id / filename
 ```
 
+**安全控制**：
+1. `region_id` 通过枚举白名单（`VALID_REGION_IDS`）校验，拒绝任何不在列表中的值
+2. `year` 仅允许 `"multi"` 或匹配 `^\d{4}$` 的字符串，拒绝含路径分隔符的输入
+3. 路径由已校验的两个分量拼接，无用户可控的自由字符串参与路径构造
+4. 最终对 `resolved(filepath)` 做前缀断言：必须以 `resolved(REPORT_DIR)` 开头（纵深防御）
+
 **处理逻辑**：
-1. 拼接文件路径
-2. 检查文件是否存在，否则返回 404
-3. 返回文件流，设置正确的 Content-Disposition 头
+1. 校验 `region_id` 和 `year` 参数
+2. 确定性拼接文件路径
+3. 路径前缀断言
+4. 检查文件存在，否则返回 404
+5. `FileResponse` 返回，设置 `Content-Disposition: attachment`
 
 **响应**：
 - 成功：`200 OK`，`Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+- 参数非法：`400`，JSON 错误体
 - 文件不存在：`404`，JSON 错误体
 
 ---

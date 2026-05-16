@@ -81,6 +81,9 @@ htmlcov/
 # 原始 netcdf 数据（体积大，不入库）
 data/nc/
 
+# 甲方预生成报告文档（体积大，不入库；需手动放置后运行 make data-reports）
+data/docx/
+
 # 外部提供的预计算 CSV 数据（不入库）
 data/csv/
 

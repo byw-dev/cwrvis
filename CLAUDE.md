@@ -52,6 +52,10 @@ cwrvis/
 │
 ├── data/
 │   ├── nc/                    # netcdf 原始数据（gitignored，由甲方提供）
+│   ├── docx/                  # 预生成报告文档（gitignored，由甲方提供；make data-reports 复制至 static/reports/）
+│   │   └── {region_id}/       # 每区域一子目录，如 lasa/、xizang/ 等
+│   │       ├── {YYYY}-Year_Evaluation_Report-{region_id}.docx
+│   │       └── Multi-Year_Evaluation_Report-{region_id}.docx
 │   └── shapes/                # 预设区域边界 GeoJSON（GCJ-02，高德来源，在 git 中）
 │
 ├── scripts/                   # 离线数据预生成脚本（Python，uv run）
@@ -80,7 +84,7 @@ cwrvis/
 ├── static/                    # 【gitignored】所有生成的静态资产
 │   ├── grid/                  # 格点 JSON（76 文件）
 │   ├── shapes/                # region_id 命名的 GeoJSON
-│   ├── reports/               # .docx 报告
+│   ├── reports/               # .docx 报告（由 make data-reports 从 data/docx/ 复制，保留子目录结构）
 │   └── web/                   # 前端 build 产物
 │
 ├── db/                        # 【gitignored】生成的数据库

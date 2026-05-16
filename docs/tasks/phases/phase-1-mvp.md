@@ -11,7 +11,7 @@
 - [ ] 时间轴可播放，帧切换流畅无明显卡顿 — **F-07、F-10**
 - [ ] 色卡阈值过滤可用（图例上设置 min/max 隐藏超出范围的格点）— **F-12**
 - [ ] ≥2 个预设区域可点击，显示区域统计图表 — **F-14、F-15、F-16**
-- [ ] 报告下载链接可正常触发文件下载 — **B-03、F-17**
+- [ ] 报告下载链接可正常触发文件下载（选区域 + 年份，下载对应 docx）— **S-07、B-07、F-25**
 - [ ] 系统在公网服务器上稳定运行，响应时间合理 — **D-01、D-02**
 
 > ⚠️ 若甲方验收要求强制使用高德底图，需申请 API Key（见 backlog.md P-2）并将 `settings.basemap` 默认值改为 `'amap_street'`。
@@ -141,6 +141,13 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - CLAUDE.md 更新 Python 环境管理说明，反映两套独立 venv 的事实
   - `← needs: S-04`
 
+- [ ] `TODO` **S-07** `[S]` 报告文档复制：`data/docx/ → static/reports/`
+  - Makefile 新增 `data-reports` target：`rsync -a --include="*.docx" data/docx/ static/reports/`（保留子目录结构）
+  - `.gitignore` 补充 `data/docx/`（已完成）
+  - CLAUDE.md / backend.md 更新仓库结构说明（已完成）
+  - 更新 `data` target 依赖，使 `make data` 也包含报告复制
+  - `← needs: data/docx/ 目录就绪（甲方提供）`
+
 - [x] `DONE` **S-04** `[M]` 根目录 Makefile（项目全流程构建脚本）
   - Targets（见 data-pipeline.md "项目构建脚本"节）：
     - `data-sqlite`：运行 S-02 脚本（支持 `METHOD=` 变量覆盖，默认 `area_weighted`）
@@ -172,10 +179,14 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 参数校验：region_id 不存在 → 404；granularity 非法 → 400；year 范围非法 → 400
   - `← needs: B-01`，需要 `stats.db`（若 S-02 未完成可用空数据库开发接口骨架）
 
-- [x] `DONE` **B-03** `[S]` `/api/v1/report/download` 接口（`routers/report.py`）
-  - 按 `{region_id}_{granularity}_{start}_{end}.docx` 拼接路径，`FileResponse` 返回
-  - 文件不存在 → 404 JSON；路径穿越校验（只允许访问 `REPORT_DIR` 内文件）
+- [x] `DONE` **B-03** `[S]` `/api/v1/report/download` 接口初版（已被 B-07 替代）
+  - 旧参数设计 `{region_id}_{granularity}_{start}_{end}.docx` 与甲方实际文件命名不符
   - `← needs: B-01`
+
+- [ ] `TODO` **B-07** `[S]` 报告接口重写 + 报告元数据接口（`routers/report.py`）
+  - **新增** `GET /api/v1/report/meta`：启动时扫描 `REPORT_DIR` 一次，结果缓存模块级变量；返回各区域实际存在的年份列表和 `has_multi` 标记（见 `docs/design/backend.md`）
+  - **重写** `GET /api/v1/report/download`：参数简化为 `region_id` + `year`（`"2000"`~`"2025"` 或 `"multi"`）；文件命名对齐甲方实际格式；安全控制：枚举白名单 + 正则校验 + 路径前缀断言（见 backend.md）
+  - `← needs: S-07（static/reports/ 就绪后可完整测试）`
 
 - [x] `DONE` **B-04** `[S]` `/api/v1/meta/regions` 接口（`routers/meta.py`）
   - 从 `REGION_MAP` 硬编码返回区域列表（`region_id`、`name`、`level`）
@@ -342,10 +353,18 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 
 ### 其余模块
 
-- [x] `DONE` **F-17** `[S]` ExportModule（数据导出）
-  - 居中卡片布局；RegionPicker（复用 F-06 中的同名组件）+ 年份下拉
-  - 下载：构造 URL → `<a href download>` 触发；后端 404 → 页面内行内错误提示
+- [x] `DONE` **F-17** `[S]` ExportModule 骨架（已被 F-25 完善）
+  - 居中卡片布局；RegionPicker + 年份下拉；下载按钮骨架
   - `← needs: F-06`
+
+- [ ] `TODO` **F-25** `[S]` ExportModule 完整实现（对接 B-07 真实接口）
+  - mount 时请求 `/api/v1/report/meta`，用返回数据驱动区域和年份下拉（含"多年汇总"选项）
+  - **不使用 regionStore**，ExportModule 完全独立状态，与区域统计模块无关联
+  - 区域下拉展示全部 8 个区域（xizang 省级 + 7 个地市），顺序与 REGION_MAP 一致
+  - 年份下拉：展示实际存在的年份 + "多年汇总"（仅 `has_multi: true` 时显示）
+  - 下载：`fetch /api/v1/report/download?region_id=...&year=...` → blob → `<a>` 触发
+  - 后端 404 → 行内错误提示；meta 加载失败 → 提示占位
+  - `← needs: B-07, F-17`
 
 - [x] `DONE` **F-18** `[S]` SettingsPanel（用户设置）
   - Overlay 面板（点击遮罩关闭）
