@@ -366,19 +366,21 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 见 `docs/design/frontend.md` F-21 节
   - `← needs: F-14`
 
-- [ ] `TODO` **F-22** `[M]` 格点图层等值线叠加（Feature，优先级最高）
+- [ ] `BLOCKED` **F-22** `[M]` 格点图层等值线叠加（Feature，优先级最高）
   - 依赖 `d3-contour`；8 条等值线按 vmin/vmax 均分；4 种线型循环（细虚→粗虚→细实→粗实）
   - 坐标变换：格点索引 → WGS-84；MapLibre geojson + line + symbol layer
   - 等值线数值标注（toPrecision(4)，大数科学计数，不显示单位）
   - 图例面板底部独立开关按钮；帧切换/kg↔mm 时自动重算
   - `← needs: F-10`
+  - ← **BLOCKED**：平滑性/映射偏差（BUG-18）未解决；标注需 deck.gl，与 F-23 捆绑决策；代码归档于 `archive/F-22-contour-v1`，见 backlog
 
-- [ ] `TODO` **F-23** `[M]` 格点图层高低点标注（Feature，优先级次之）
+- [ ] `BLOCKED` **F-23** `[M]` 格点图层高低点标注（Feature，优先级次之）
   - 8-邻域比较法查局部极值；top-3 极大值（H，暖色）+ top-3 极小值（L，冷色）
   - MapLibre symbol layer；数值格式同等值线
   - 图例面板底部独立开关按钮；`← needs: F-10`
+  - ← **BLOCKED**：渲染方案（deck.gl TextLayer + CollisionFilterExtension）与 F-22 标注耦合，一并决策后实现
 
-- [ ] `TODO` **F-24** `[S]` 格点图层数值标注（Feature，低优先级）
+- [ ] `BLOCKED` **F-24** `[S]` 格点图层数值标注（Feature，低优先级）
   - 格点中心显示数值；zoom ≥ 6 时渲染；text-allow-overlap: false
   - MapLibre symbol layer；`← needs: F-10`
   - `RegionMeta` 类型增加 `area_m2?: number`，从 `/meta/regions` 响应读取
@@ -387,6 +389,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - `RegionHistoryModal.vue`：折线数据取值后 `/ area_m2`；Y 轴单位标注同步；标题栏追加 `kg→mm / mm→kg` 按钮（与 HistoryModal 格点模式样式一致）
   - `area_m2` 为 `null` 时：Legend 单位切换按钮不显示，降级为纯 kg 展示
   - `← needs: B-05, F-16`
+  - ← **BLOCKED**：随 F-22/F-23 一并推迟，见 backlog
 
 ---
 
