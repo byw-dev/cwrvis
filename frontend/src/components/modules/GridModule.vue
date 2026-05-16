@@ -9,6 +9,7 @@ import Legend from '@/components/panels/Legend.vue'
 import Inspector from '@/components/panels/Inspector.vue'
 import HistoryModal from '@/components/modals/HistoryModal.vue'
 import { isInGridBounds } from '@/utils/grid'
+import { useMetaStore } from '@/stores/meta'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
 // fetchFrames 已从 useGridLayer return 中移除，历史数据由 HistoryModal 懒加载
@@ -17,6 +18,7 @@ const { map }                         = useMap()
 const { getValueAt, renderTick }      = useGridLayer()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
+const metaStore = useMetaStore()
 
 // 当前实际显示的单位（mm 模式下 kg var 展示 mm）
 const effectiveUnit = computed(() =>
@@ -75,7 +77,7 @@ function getLngLat(clientX: number, clientY: number) {
 
 function onMouseMove(e: MouseEvent) {
   const lngLat = getLngLat(e.clientX, e.clientY)
-  if (!lngLat || !isInGridBounds(lngLat.lat, lngLat.lng)) {
+  if (!lngLat || !isInGridBounds(lngLat.lat, lngLat.lng, metaStore.grid?.lat ?? [], metaStore.grid?.lon ?? [])) {
     hover.value = null
     return
   }
@@ -93,7 +95,7 @@ function onMapMove() {
 }
 
 function onMapClick(e: { lngLat: LngLat; point: { x: number; y: number } }) {
-  if (!isInGridBounds(e.lngLat.lat, e.lngLat.lng)) { clearPick(); return }
+  if (!isInGridBounds(e.lngLat.lat, e.lngLat.lng, metaStore.grid?.lat ?? [], metaStore.grid?.lon ?? [])) { clearPick(); return }
   picked.value    = { lat: e.lngLat.lat, lon: e.lngLat.lng, x: e.point.x, y: e.point.y }
   pickedValue.value = getValueAt(e.lngLat.lat, e.lngLat.lng)
 }

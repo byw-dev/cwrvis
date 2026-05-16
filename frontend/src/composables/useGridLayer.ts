@@ -1,5 +1,5 @@
 import { ref, watch, shallowRef, onUnmounted, toRaw } from 'vue'
-import { useMap } from './useMap'
+import { useMap, computeGridScale } from './useMap'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
@@ -172,13 +172,17 @@ export function useGridLayer() {
     const fk = frameKey(varName, mode, idx)
     pendingRanges.set(fk, { vmin, vmax })
 
+    const nLon = metaStore.grid?.lon.length ?? 25
+    const nLat = metaStore.grid?.lat.length ?? 15
+    const k    = computeGridScale(nLon, nLat)
+
     const req: RenderRequest = {
       frame2d,
       lut,
       vmin,
       vmax,
-      targetW:  600,
-      targetH:  400,
+      targetW:  nLon * k,
+      targetH:  nLat * k,
       frameKey: fk,
       ...(needConvert && dxy ? { dxy, convertToMm: true } : {}),
     }
@@ -259,15 +263,17 @@ export function useGridLayer() {
 
   // 获取当前帧在 (lat, lon) 处的插值，供 hover/click 使用
   function getValueAt(lat: number, lon: number): number | null {
+    const grid = metaStore.grid
+    if (!grid) return null
     const data = jsonCache.get(cacheKey(varStore.selVar, timeStore.mode))
     const frame = data?.[timeStore.currentIndex]
     if (!frame) return null
-    const val = bilinearInterp(frame, lat, lon)
+    const val = bilinearInterp(frame, lat, lon, grid.lat, grid.lon)
     if (val === null) return null
     if (isKgToMm.value && VARS[varStore.selVar]?.units === 'kg') {
-      const dxy = metaStore.grid?.dxy
+      const dxy = grid.dxy
       if (dxy) {
-        const dxyVal = bilinearInterp(dxy as (number | null)[][], lat, lon)
+        const dxyVal = bilinearInterp(dxy as (number | null)[][], lat, lon, grid.lat, grid.lon)
         return dxyVal && dxyVal > 0 ? val / dxyVal : null
       }
     }

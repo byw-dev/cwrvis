@@ -1,21 +1,51 @@
-// 格点空间边界（WGS-84，1° 网格外边界）
-export const GRID_BOUNDS = { latMin: 25, latMax: 40, lonMin: 75, lonMax: 100 }
-
-export function isInGridBounds(lat: number, lon: number): boolean {
-  return lat >= GRID_BOUNDS.latMin && lat <= GRID_BOUNDS.latMax
-    && lon >= GRID_BOUNDS.lonMin && lon <= GRID_BOUNDS.lonMax
+// Compute the cell-boundary extent of a regular lat/lon grid (WGS-84).
+// Returns outer edges = grid centers ± half step.
+// Requires lats.length >= 2 and lons.length >= 2.
+export function computeGridBounds(lats: number[], lons: number[]) {
+  const halfLon = Math.abs(lons[1] - lons[0]) / 2
+  const halfLat = Math.abs(lats[1] - lats[0]) / 2
+  return {
+    lonMin: Math.min(lons[0], lons[lons.length - 1]) - halfLon,
+    lonMax: Math.max(lons[0], lons[lons.length - 1]) + halfLon,
+    latMin: Math.min(lats[0], lats[lats.length - 1]) - halfLat,
+    latMax: Math.max(lats[0], lats[lats.length - 1]) + halfLat,
+  }
 }
 
-// 双线性插值：格点 lat 39.5→25.5（步长 -1），lon 75.5→99.5（步长 +1）
-export function bilinearInterp(frame2d: (number | null)[][], lat: number, lon: number): number | null {
-  const gy = (lat - 39.5) / -1
-  const gx = (lon - 75.5) /  1
+export function isInGridBounds(lat: number, lon: number, lats: number[], lons: number[]): boolean {
+  if (lats.length < 2 || lons.length < 2) return false
+  const { latMin, latMax, lonMin, lonMax } = computeGridBounds(lats, lons)
+  return lat >= latMin && lat <= latMax && lon >= lonMin && lon <= lonMax
+}
 
-  const gy0 = Math.floor(gy), gy1 = Math.min(gy0 + 1, frame2d.length - 1)
-  const gx0 = Math.floor(gx), gx1 = Math.min(gx0 + 1, (frame2d[0]?.length ?? 1) - 1)
-  if (gy0 < 0 || gx0 < 0) return null
+// Bilinear interpolation on a regular lat/lon grid.
+// lats: center latitudes (N→S, descending). lons: center longitudes (W→E, ascending).
+// Points in the outer half-cell border are clamped to the nearest edge center
+// rather than returning null, so the full cell-boundary extent returns valid values.
+export function bilinearInterp(
+  frame2d: (number | null)[][],
+  lat: number,
+  lon: number,
+  lats: number[],
+  lons: number[],
+): number | null {
+  const nLon = lons.length, nLat = lats.length
+  if (nLon < 2 || nLat < 2) return null
 
-  const ty = gy - gy0, tx = gx - gx0
+  const lonStep = lons[1] - lons[0]  // > 0 (W→E)
+  const latStep = lats[1] - lats[0]  // < 0 (N→S)
+
+  const gx = (lon - lons[0]) / lonStep
+  const gy = (lat - lats[0]) / latStep
+
+  // Clamp to [0, n-1]: outer half-cell border returns the nearest edge grid value
+  const gxc = Math.max(0, Math.min(nLon - 1, gx))
+  const gyc = Math.max(0, Math.min(nLat - 1, gy))
+
+  const gx0 = Math.floor(gxc), gx1 = Math.min(gx0 + 1, nLon - 1)
+  const gy0 = Math.floor(gyc), gy1 = Math.min(gy0 + 1, nLat - 1)
+  const tx = gxc - gx0, ty = gyc - gy0
+
   let wSum = 0, vSum = 0
   const corners = [
     [gy0, gx0, (1 - tx) * (1 - ty)],

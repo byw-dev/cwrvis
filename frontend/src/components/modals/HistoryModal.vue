@@ -85,10 +85,12 @@ function seriesData(tab: TabKey): { labels: string[]; values: (number | null)[] 
   // kg→mm：dxy 值对该点插值一次，312 帧共用
   const needConvert = isKgVar.value && isKgToMm.value
   const dxy = needConvert ? (metaStore.grid?.dxy ?? null) : null
-  const dxyVal = dxy ? bilinearInterp(dxy as (number | null)[][], props.lat!, props.lon!) : null
+  const gridLat = metaStore.grid?.lat ?? []
+  const gridLon = metaStore.grid?.lon ?? []
+  const dxyVal = dxy ? bilinearInterp(dxy as (number | null)[][], props.lat!, props.lon!, gridLat, gridLon) : null
 
   const values = frames.map(f => {
-    const v = bilinearInterp(f, props.lat!, props.lon!)
+    const v = bilinearInterp(f, props.lat!, props.lon!, gridLat, gridLon)
     if (!needConvert || v === null || !dxyVal || dxyVal <= 0) return v
     return v / dxyVal
   })
