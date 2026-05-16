@@ -29,8 +29,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const basemap = ref<BasemapId>(
     readLS<BasemapId>('basemap', 'osm')
   )
-  const legendPosition = ref<'left' | 'right'>(
-    readLS<'left' | 'right'>('legend_pos', 'right')
+  const scaleMode = ref<'auto' | 'preset'>(
+    readLS<'auto' | 'preset'>('scale_mode', 'auto')
   )
   // Grouped: { CWR: 'turbo', SP: 'viridis', ... }
   const colormaps = ref<Partial<Record<VarName, ColormapName>>>(
@@ -42,9 +42,9 @@ export const useSettingsStore = defineStore('settings', () => {
   )
 
   // Auto-persist on change
-  watch(basemap,        v => writeLS('basemap',     v))
-  watch(legendPosition, v => writeLS('legend_pos',  v))
-  watch(colormaps,      v => writeLS('colormaps',   v), { deep: true })
+  watch(basemap,    v => writeLS('basemap',    v))
+  watch(scaleMode,  v => writeLS('scale_mode', v))
+  watch(colormaps,  v => writeLS('colormaps',  v), { deep: true })
   watch(speeds,         v => writeLS('speeds',      v), { deep: true })
 
   function getColormap(varName: VarName): ColormapName {
@@ -72,7 +72,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     basemap,
-    legendPosition,
+    scaleMode,
     colormaps,
     speeds,
     getColormap,

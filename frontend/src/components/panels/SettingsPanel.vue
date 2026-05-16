@@ -63,19 +63,20 @@ function fmtTime(iso: string): string {
           </div>
         </div>
 
-        <!-- Legend position -->
+        <!-- Scale mode -->
         <div class="settings-section">
-          <div class="section-label">图例位置</div>
+          <div class="section-label">格点量程</div>
           <div class="radio-group">
-            <label class="radio-item" :class="{ active: settings.legendPosition === 'left' }">
-              <input type="radio" value="left" :checked="settings.legendPosition === 'left'" @change="settings.legendPosition = 'left'" />
-              左侧
+            <label class="radio-item" :class="{ active: settings.scaleMode === 'auto' }">
+              <input type="radio" value="auto" :checked="settings.scaleMode === 'auto'" @change="settings.scaleMode = 'auto'" />
+              自动（逐帧计算）
             </label>
-            <label class="radio-item" :class="{ active: settings.legendPosition === 'right' }">
-              <input type="radio" value="right" :checked="settings.legendPosition === 'right'" @change="settings.legendPosition = 'right'" />
-              右侧
+            <label class="radio-item" :class="{ active: settings.scaleMode === 'preset' }">
+              <input type="radio" value="preset" :checked="settings.scaleMode === 'preset'" @change="settings.scaleMode = 'preset'" />
+              预设（统计推荐量程）
             </label>
           </div>
+          <div class="section-hint">预设量程对逐年/逐月/月平均生效；季平均始终自动；用户手动输入优先级最高</div>
         </div>
       </div>
 
@@ -177,6 +178,13 @@ function fmtTime(iso: string): string {
   border: 1px solid transparent;
 }
 .radio-item input { accent-color: var(--accent); cursor: pointer; }
+
+.section-hint {
+  margin-top: 0.375em;
+  font-size: 0.5625rem;
+  color: var(--fg-3);
+  line-height: 1.5;
+}
 .radio-item:hover { background: var(--bg-3); color: var(--fg-0); }
 .radio-item.active { color: var(--fg-0); border-color: var(--line-2); background: var(--bg-2); }
 

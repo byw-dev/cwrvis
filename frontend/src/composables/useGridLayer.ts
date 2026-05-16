@@ -5,6 +5,7 @@ import { useVarStore } from '@/stores/var'
 import { useSettingsStore } from '@/stores/settings'
 import { useMetaStore } from '@/stores/meta'
 import { VARS } from '@/config/vars'
+import { COLORBAR_PRESETS } from '@/config/colorbars'
 import { getLut } from '@/utils/colormap'
 import { bilinearInterp } from '@/utils/grid'
 import type { RenderRequest, RenderResponse } from '@/workers/gridRenderer.worker'
@@ -153,7 +154,7 @@ export function useGridLayer() {
     // toRaw 取出底层原始数组再传给 Worker
     const dxy = needConvert ? (metaStore.grid?.dxy ? toRaw(metaStore.grid.dxy) : null) : null
 
-    // 逐帧从数据自动计算量程（mm 模式下用换算后的值推算）
+    // 自动量程：逐帧从数据计算（mm 模式下用换算后的值推算）
     let dataMin = Infinity, dataMax = -Infinity
     for (let i = 0; i < frame2d.length; i++) {
       for (let j = 0; j < (frame2d[i]?.length ?? 0); j++) {
@@ -167,9 +168,22 @@ export function useGridLayer() {
     }
     if (!isFinite(dataMin)) { dataMin = 0; dataMax = 1 }  // 全缺测兜底
 
-    // 用户手动输入的一侧优先，另一侧用帧数据自动值
-    const vmin = varStore.threshMin ?? dataMin
-    const vmax = varStore.threshMax ?? dataMax
+    // 预设量程：适用于 yearly/avg_yearly/monthly/avg_monthly 模式
+    // avg_season 始终走自动；优先级：用户手动输入 > 预设 > 自动
+    let baseMin = dataMin, baseMax = dataMax
+    if (settings.scaleMode === 'preset') {
+      const gran: 'year' | 'month' | null =
+        (mode === 'yearly' || mode === 'avg_yearly')  ? 'year'  :
+        (mode === 'monthly' || mode === 'avg_monthly') ? 'month' : null
+      if (gran !== null) {
+        const unit: 'kg' | 'mm' = (isKgToMm.value && VARS[varName]?.units === 'kg') ? 'mm' : 'kg'
+        const preset = COLORBAR_PRESETS[varName]?.[gran]?.[unit]
+        if (preset) { baseMin = preset.vmin; baseMax = preset.vmax }
+      }
+    }
+
+    const vmin = varStore.threshMin ?? baseMin
+    const vmax = varStore.threshMax ?? baseMax
 
     varStore.setRenderRange(vmin, vmax)
 
@@ -236,9 +250,9 @@ export function useGridLayer() {
     }
   }
 
-  // 色卡/阈值/单位变更：清 bitmap 缓存后重渲
+  // 色卡/阈值/单位/量程模式变更：清 bitmap 缓存后重渲
   watch(
-    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax, isKgToMm],
+    [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax, isKgToMm, () => settings.scaleMode],
     () => { imageCache.clear(); pendingKeys.clear(); pendingRanges.clear(); renderCurrent() },
   )
 
