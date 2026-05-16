@@ -65,3 +65,17 @@
 - `bilinearInterp`：`col = (lon - 75.5) / 1.0`（以格点中心 75.5 为起点）
 - 在格网中心（lon=87.5）完全吻合，向边缘偏差最大约 **0.48 格点（≈0.48°）**
 **相关文件**：`frontend/src/utils/grid.ts`，`frontend/src/composables/useGridLayer.ts`（worker 调用）
+
+---
+
+## BUG-19 · HistoryModal 逐月/逐年帧数硬编码
+
+**发现时间**：2026-05-16
+**严重程度**：Minor
+**重现步骤**：
+1. 查看 `frontend/src/components/modals/HistoryModal.vue` 第 47–48 行
+2. `TABS` 数组中 `monthly: frames: 312`、`yearly: frames: 26` 写死
+**期望行为**：帧数应从 metaStore 的时间元数据动态读取（数据集时间范围决定月帧数和年帧数）
+**实际行为**：若数据集时间跨度变化（如从 312 个月扩展或缩短），UI 上显示的帧数标注不会更新，且任何依赖该字段的逻辑也会出错
+**备注**：`avg_monthly: 12`（月平均按月分 12 组）和 `avg_season: 4`（季平均按季分 4 组）为领域常量，正确，不需修改
+**相关文件**：`frontend/src/components/modals/HistoryModal.vue:47-48`
