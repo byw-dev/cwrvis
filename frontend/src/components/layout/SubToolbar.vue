@@ -16,11 +16,6 @@ const regionStore = useRegionStore()
 const varOpen    = ref(false)
 const regionOpen = ref(false)
 
-// Export form year selection
-const exportYear = ref<number | 'all'>('all')
-const exportYearOpen = ref(false)
-const EXPORT_YEARS = ['all', ...Array.from({ length: YEAR_MAX - YEAR_MIN + 1 }, (_, i) => YEAR_MIN + i)]
-
 onMounted(() => { if (props.activeModule === 'region') regionStore.loadRegions() })
 
 // ── Computed helpers ──────────────────────────────────────────────────────────
@@ -181,55 +176,6 @@ const selRegionName = computed(() =>
       </div>
     </template>
 
-    <!-- ── EXPORT form ────────────────────────────────────────────────────── -->
-    <template v-else-if="activeModule === 'export'">
-      <div class="dropdown-wrap">
-        <button class="region-btn" @click="regionOpen = !regionOpen">
-          <span>{{ selRegionName }}</span>
-          <span class="caret">▾</span>
-        </button>
-        <div v-if="regionOpen" class="dropdown region-dropdown">
-          <button
-            class="dropdown-item"
-            :class="{ active: regionStore.selRegionId === 'xizang' }"
-            @click="regionStore.selectRegion('xizang'); regionOpen = false"
-          >
-            <span class="region-dot" :class="{ on: regionStore.selRegionId === 'xizang' }">●</span>
-            西藏自治区（全区）
-          </button>
-          <div class="dropdown-divider" />
-          <button
-            v-for="r in regionStore.regions.filter(r => r.level === 'prefecture')"
-            :key="r.region_id"
-            class="dropdown-item region-item"
-            :class="{ active: regionStore.selRegionId === r.region_id }"
-            @click="regionStore.selectRegion(r.region_id as any); regionOpen = false"
-          >
-            <span class="region-dot" :class="{ on: regionStore.selRegionId === r.region_id }">●</span>
-            {{ r.name }}
-          </button>
-        </div>
-        <div v-if="regionOpen" class="dropdown-backdrop" @click="regionOpen = false" />
-      </div>
-
-      <div class="toolbar-sep" />
-
-      <!-- Year picker -->
-      <div class="dropdown-wrap">
-        <button class="param-btn" @click="exportYearOpen = !exportYearOpen">
-          {{ exportYear === 'all' ? '全部年份' : exportYear }} ▾
-        </button>
-        <div v-if="exportYearOpen" class="dropdown year-dropdown">
-          <button
-            v-for="y in EXPORT_YEARS" :key="y"
-            class="dropdown-item"
-            :class="{ active: exportYear === y }"
-            @click="exportYear = y as any; exportYearOpen = false"
-          >{{ y === 'all' ? '全部' : y }}</button>
-        </div>
-        <div v-if="exportYearOpen" class="dropdown-backdrop" @click="exportYearOpen = false" />
-      </div>
-    </template>
 
   </div>
 </template>

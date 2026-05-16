@@ -1,42 +1,82 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRegionStore } from '@/stores/region'
-import { YEAR_MIN, YEAR_MAX } from '@/config/constants'
 
-const regionStore = useRegionStore()
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
 
-const selectedYear = ref<number | 'all'>('all')
-const error        = ref<string | null>(null)
-const downloading  = ref(false)
+// ── 报告元数据（启动时从 /report/meta 加载）────────────────────────────────
 
-const YEARS = ['all', ...Array.from({ length: YEAR_MAX - YEAR_MIN + 1 }, (_, i) => YEAR_MIN + i)]
+interface RegionMeta {
+  name:      string
+  level:     string
+  years:     number[]
+  has_multi: boolean
+}
 
-onMounted(() => regionStore.loadRegions())
+const metaLoading = ref(true)
+const metaError   = ref<string | null>(null)
+const reportMeta  = ref<Record<string, RegionMeta>>({})
 
-const regionName = computed(() => regionStore.selRegion?.name ?? '西藏自治区（全区）')
+onMounted(async () => {
+  try {
+    const res = await fetch(`${API_BASE}/report/meta`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = await res.json()
+    reportMeta.value = json.data ?? {}
+  } catch {
+    metaError.value = '报告目录加载失败，请刷新重试'
+  } finally {
+    metaLoading.value = false
+  }
+})
+
+// ── 区域列表：province 排前，prefecture 在后 ─────────────────────────────────
+
+const regionList = computed(() =>
+  Object.entries(reportMeta.value)
+    .map(([id, m]) => ({ id, ...m }))
+    .sort((a, b) => (a.level === 'province' ? -1 : 1) - (b.level === 'province' ? -1 : 1))
+)
+
+// ── 选择状态 ────────────────────────────────────────────────────────────────
+
+const selRegionId = ref<string>('')
+const selYear     = ref<string>('')
+
+const selRegion = computed(() =>
+  selRegionId.value ? reportMeta.value[selRegionId.value] ?? null : null
+)
+
+function onRegionChange(id: string) {
+  selRegionId.value = id
+  selYear.value     = ''
+}
+
+// ── 下载 ─────────────────────────────────────────────────────────────────────
+
+const downloading = ref(false)
+const dlError     = ref<string | null>(null)
+
+const canDownload = computed(() => !!selRegionId.value && !!selYear.value && !downloading.value)
 
 async function download() {
-  error.value = null
+  if (!canDownload.value) return
+  dlError.value     = null
   downloading.value = true
   try {
-    const rid  = regionStore.selRegionId
-    const gran = selectedYear.value === 'all' ? 'year' : 'year'
-    const start = selectedYear.value === 'all' ? String(YEAR_MIN) : String(selectedYear.value)
-    const end   = selectedYear.value === 'all' ? String(YEAR_MAX) : String(selectedYear.value)
-
-    const base = import.meta.env.VITE_API_BASE ?? '/api/v1'
-    const url  = `${base}/report/download?region_id=${rid}&granularity=${gran}&start=${start}&end=${end}`
-    const res  = await fetch(url)
-    if (res.status === 404) { error.value = '该组合暂无报告文件'; return }
-    if (!res.ok) { error.value = `下载失败（HTTP ${res.status}）`; return }
-    const blob = await res.blob()
-    const a    = document.createElement('a')
-    a.href     = URL.createObjectURL(blob)
-    a.download = `${rid}_${gran}_${start}_${end}.docx`
+    const url = `${API_BASE}/report/download?region_id=${selRegionId.value}&year=${selYear.value}`
+    const res = await fetch(url)
+    if (res.status === 404) { dlError.value = '该组合暂无报告文件'; return }
+    if (!res.ok)            { dlError.value = `下载失败（HTTP ${res.status}）`; return }
+    const blob    = await res.blob()
+    const cd      = res.headers.get('Content-Disposition') ?? ''
+    const fnMatch = cd.match(/filename="?([^";]+)"?/)
+    const a       = document.createElement('a')
+    a.download    = fnMatch ? fnMatch[1] : `report-${selRegionId.value}-${selYear.value}.docx`
+    a.href        = URL.createObjectURL(blob)
     a.click()
     URL.revokeObjectURL(a.href)
   } catch {
-    error.value = '网络错误，请重试'
+    dlError.value = '网络错误，请重试'
   } finally {
     downloading.value = false
   }
@@ -48,41 +88,42 @@ async function download() {
     <div class="export-card">
       <div class="export-title">数据导出</div>
 
-      <div class="form-row">
-        <label class="form-label">区域</label>
-        <select
-          class="form-select"
-          :value="regionStore.selRegionId"
-          @change="regionStore.selectRegion(($event.target as HTMLSelectElement).value as any)"
-        >
-          <option value="xizang">西藏自治区（全区）</option>
-          <optgroup label="地市">
-            <option
-              v-for="r in regionStore.regions.filter(r => r.level === 'prefecture')"
-              :key="r.region_id"
-              :value="r.region_id"
-            >{{ r.name }}</option>
-          </optgroup>
-        </select>
-      </div>
+      <div v-if="metaLoading" class="meta-state">加载报告目录…</div>
+      <div v-else-if="metaError" class="meta-state error">{{ metaError }}</div>
 
-      <div class="form-row">
-        <label class="form-label">年份</label>
-        <select
-          class="form-select"
-          :value="selectedYear"
-          @change="selectedYear = ($event.target as HTMLSelectElement).value === 'all' ? 'all' : Number(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="all">全部</option>
-          <option v-for="y in YEARS.slice(1)" :key="y" :value="y">{{ y }}</option>
-        </select>
-      </div>
+      <template v-else>
+        <div class="form-row">
+          <label class="form-label">区域</label>
+          <select
+            class="form-select"
+            :value="selRegionId"
+            @change="onRegionChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="" disabled>请选择区域</option>
+            <option v-for="r in regionList" :key="r.id" :value="r.id">{{ r.name }}</option>
+          </select>
+        </div>
 
-      <button class="download-btn" :disabled="downloading" @click="download">
-        {{ downloading ? '下载中…' : '⬇ 下载报告' }}
-      </button>
+        <div class="form-row">
+          <label class="form-label">年份</label>
+          <select
+            class="form-select"
+            :value="selYear"
+            :disabled="!selRegion"
+            @change="selYear = ($event.target as HTMLSelectElement).value"
+          >
+            <option value="" disabled>{{ selRegion ? '请选择年份' : '—' }}</option>
+            <option v-if="selRegion?.has_multi" value="multi">多年汇总</option>
+            <option v-for="y in (selRegion?.years ?? [])" :key="y" :value="String(y)">{{ y }}</option>
+          </select>
+        </div>
 
-      <div v-if="error" class="export-error">{{ error }}</div>
+        <button class="download-btn" :disabled="!canDownload" @click="download">
+          {{ downloading ? '下载中…' : '⬇ 下载报告' }}
+        </button>
+
+        <div v-if="dlError" class="export-error">{{ dlError }}</div>
+      </template>
 
       <div class="export-note">
         ℹ 报告为 .docx 格式，由数据团队预生成。<br>
@@ -123,6 +164,12 @@ async function download() {
   margin-bottom: 0.25em;
 }
 
+.meta-state {
+  font-size: 0.75rem;
+  color: var(--fg-3);
+}
+.meta-state.error { color: var(--warn); }
+
 .form-row {
   display: flex;
   align-items: center;
@@ -146,7 +193,8 @@ async function download() {
   padding: 0.3125em 0.5em;
   outline: none;
 }
-.form-select:focus { border-color: var(--accent-dim); }
+.form-select:focus   { border-color: var(--accent-dim); }
+.form-select:disabled { opacity: 0.45; cursor: default; }
 
 .download-btn {
   padding: 0.5em;
