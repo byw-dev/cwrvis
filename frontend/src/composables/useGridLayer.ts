@@ -75,6 +75,9 @@ class LruCache<V> {
 const imageCache    = new LruCache<FrameData>(20)
 // sendToWorker 与 worker.onmessage 之间传递量程，避免异步丢失
 const pendingRanges = new Map<string, { vmin: number; vmax: number }>()
+// 正在 Worker 中渲染的帧 key 集合；防止 renderCurrent + preload 对同一帧重复投递
+// 导致第二次 onmessage 找不到 pendingRanges 条目而回退到 {0,1}（BUG-20）
+const pendingKeys   = new Set<string>()
 
 // ── Composable ────────────────────────────────────────────────────────────────
 
@@ -93,6 +96,7 @@ export function useGridLayer() {
   // Receive rendered pixels from Worker
   worker.onmessage = (e: MessageEvent<RenderResponse>) => {
     const { pixels, width, height, frameKey } = e.data
+    pendingKeys.delete(frameKey)
     const range = pendingRanges.get(frameKey) ?? { vmin: 0, vmax: 1 }
     pendingRanges.delete(frameKey)
     const frameData: FrameData = {
@@ -170,6 +174,8 @@ export function useGridLayer() {
     varStore.setRenderRange(vmin, vmax)
 
     const fk = frameKey(varName, mode, idx)
+    if (pendingKeys.has(fk)) return  // 已在渲染中，跳过重复投递（BUG-20 修复）
+    pendingKeys.add(fk)
     pendingRanges.set(fk, { vmin, vmax })
 
     const nLon = metaStore.grid?.lon.length ?? 25
@@ -233,7 +239,7 @@ export function useGridLayer() {
   // 色卡/阈值/单位变更：清 bitmap 缓存后重渲
   watch(
     [() => settings.colormaps, () => varStore.threshMin, () => varStore.threshMax, isKgToMm],
-    () => { imageCache.clear(); renderCurrent() },
+    () => { imageCache.clear(); pendingKeys.clear(); pendingRanges.clear(); renderCurrent() },
   )
 
   // var/聚合模式变更：重置单位换算状态
