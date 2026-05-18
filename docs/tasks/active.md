@@ -13,8 +13,7 @@
 
 ## Enhancements
 
-- [ ] `TODO` **B-08** `[S]` /report/download 下载前模拟延迟（← F-29 依赖）
+- [x] ~~**B-08 + F-29** 报告下载伪进度条 + 后端延迟~~ (`38176f5`)
 - [ ] `TODO` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格展示
 - [ ] `TODO` **F-28** `[S]` RegionHistoryModal CSV 导出
-- [ ] `TODO` **F-29** `[S]` ExportModule 伪进度条遮罩（含帮助文本简化 Tweak）
 - [x] ~~**F-30** 界面字号与尺寸缩放设置~~ (`a6befec`)
