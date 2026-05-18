@@ -290,3 +290,31 @@
 **修复方案**：新增 `units_map` 参数，kg 变量按年对季节内月份 `nansum` 后再跨年 `nanmean`；非 kg 变量保持直接 `nanmean`（数学等价）；units 从 netcdf 属性读取，不硬编码。修复后需重新运行 `make data-grid` 重生成 `static/grid/mean_season/` 数据
 **技术决策**：units 来源选择 netcdf 文件属性而非硬编码列表，保持脚本与数据源自洽，避免与 `backend/config.py` 的 KG_VARS 产生两处维护点
 **修复记录**：9512422 — fix(scripts): BUG-21 格点季平均 kg 变量改为两步聚合
+
+---
+
+## BUG-24 · `useXizangBoundary` initLayers 在组件卸载后仍可执行
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：进入"空间分布"模块，网络较慢时立即切换到其他模块；GeoJSON 异步加载完成后边界图层仍被加入地图
+**期望行为**：组件卸载后 initLayers 不再操作地图
+**实际行为**：`initLayers` 为异步函数，`onUnmounted` 调用 `hideLayers` 时 `layersAdded` 仍为 false，无法拦截；GeoJSON 加载完成后图层照常添加
+**相关文件**：`frontend/src/composables/useXizangBoundary.ts`
+**出现原因**：异步函数中 await 之后的代码不受 onUnmounted 同步拦截影响，需在异步续体内显式检查组件是否仍活跃
+**修复方案**：新增实例级 `let active = true` 标志；onUnmounted 时先置 `false` 再调用 hideLayers；initLayers 在入口及 await 完成后各检查一次，任一为 false 则提前返回
+**修复记录**：35b4185 — fix(frontend): BUG-24 useXizangBoundary 防卸载后 initLayers 异步续体操作地图
+
+---
+
+## BUG-25 · mean_season 两步聚合中 `nansum` 对全 NaN 格点返回 0
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：数据集中某格点某季节所有月份均为 NaN（缺测），查看该格点季平均值
+**期望行为**：全 NaN 输入的季节聚合结果保持 NaN，与后端 SQL NULL 行为一致
+**实际行为**：`np.nansum` 对全 NaN 切片返回 0.0，导致无数据格点被赋值 0
+**相关文件**：`scripts/netcdf_to_json.py`（BUG-21 修复引入）
+**出现原因**：numpy 的 `nansum` 设计上对全 NaN 输入返回 0，需额外判断后替换为 NaN
+**修复方案**：用 `np.where(np.all(np.isnan(arr), axis=0), np.nan, np.nansum(arr, axis=0))` 替代裸 `nansum`，全 NaN 格点直接填 NaN。修复后需重新运行 `make data-grid`
+**修复记录**：cabfff9 — fix(scripts): BUG-25 mean_season 季节聚合全 NaN 格点保持 NaN
