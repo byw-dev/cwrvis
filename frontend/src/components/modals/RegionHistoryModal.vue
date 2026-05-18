@@ -10,6 +10,7 @@ import { useVarStore } from '@/stores/var'
 import { VARS, VAR_GROUPS, VAR_LIST } from '@/config/vars'
 import { buildItems } from '@/stores/time'
 import { isKgToMm } from '@/composables/useGridLayer'
+import { YEAR_MIN, YEAR_MAX } from '@/config/constants'
 import type { VarName, AggMode } from '@/types'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
@@ -330,6 +331,51 @@ watch(activeTab, async (newTab, oldTab) => {
 })
 watch(() => timeStore.currentIndex, () => { if (!isAvgYearly.value) updateChart() })
 watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
+
+// ── CSV 导出 ──────────────────────────────────────────────────────────────────
+
+function exportCsv() {
+  const tab  = TABS.find(t => t.key === activeTab.value)!
+  const rows = regionStore.getCached(regionStore.selRegionId, tab.mode) ?? []
+  const varNames = VAR_LIST.map(v => v.name as VarName)
+  const convert  = isKgToMm.value && area_m2.value !== null
+
+  const timeColName = (
+    { yearly: 'year', monthly: 'year_month', avg_yearly: 'period',
+      avg_monthly: 'month', avg_season: 'season' } as const
+  )[activeTab.value]
+
+  const header = [timeColName, ...varNames].join(',')
+
+  const dataRows = rows.map(row => {
+    let timeVal: string
+    switch (activeTab.value) {
+      case 'yearly':      timeVal = String(row.year ?? ''); break
+      case 'monthly':     timeVal = (row.year && row.month)
+        ? `${row.year}-${String(row.month).padStart(2, '0')}` : ''; break
+      case 'avg_yearly':  timeVal = `${YEAR_MIN}-${YEAR_MAX}`; break
+      case 'avg_monthly': timeVal = String(row.month ?? ''); break
+      case 'avg_season':  timeVal = String(row.season ?? ''); break
+    }
+    const vals = varNames.map(vn => {
+      const raw = row[vn as string]
+      if (typeof raw !== 'number') return ''
+      return convert && VARS[vn].units === 'kg' && area_m2.value
+        ? String(raw / area_m2.value)
+        : String(raw)
+    })
+    return [timeVal!, ...vals].join(',')
+  })
+
+  const unitSuffix = convert ? 'mm' : 'kg'
+  const csv  = [header, ...dataRows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const a    = document.createElement('a')
+  a.download = `${regionStore.selRegion?.name ?? regionStore.selRegionId}-${tab.label}-云水资源数据-${unitSuffix}.csv`
+  a.href     = URL.createObjectURL(blob)
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
 </script>
 
 <template>
@@ -344,7 +390,10 @@ watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
             @click="toggleUnit"
           >{{ isKgToMm ? 'mm→kg' : 'kg→mm' }}</button>
         </div>
-        <button class="modal-close" @click="emit('close')">✕</button>
+        <div class="modal-head-right">
+          <button class="csv-btn" @click="exportCsv">⬇ 导出 CSV</button>
+          <button class="modal-close" @click="emit('close')">✕</button>
+        </div>
       </div>
 
       <div class="modal-tabs">
@@ -430,7 +479,8 @@ watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.625em 1em; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
 }
-.modal-head-left { display: flex; align-items: center; gap: 1.25em; }
+.modal-head-left  { display: flex; align-items: center; gap: 1.25em; }
+.modal-head-right { display: flex; align-items: center; gap: 0.5em; }
 .modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); }
 .unit-toggle-btn {
   background: none;
@@ -445,6 +495,18 @@ watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
 .unit-toggle-btn:hover { background: var(--accent-faint); }
 .modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
+
+.csv-btn {
+  background: none;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  padding: 0.2em 0.6em;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.csv-btn:hover { background: var(--accent-faint); }
 
 .modal-tabs {
   display: flex; align-items: center;
