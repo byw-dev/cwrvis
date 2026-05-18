@@ -46,7 +46,7 @@ const selRegionName = computed(() =>
       <!-- Var picker button -->
       <div class="dropdown-wrap">
         <button class="var-btn" @click="varOpen = !varOpen">
-          <span class="var-code">{{ vm.name }}</span>
+          <span class="var-code">{{ vm.display_name }}</span>
           <span class="var-sep">·</span>
           <span class="var-name">{{ vm.long_name }}</span>
           <span class="var-unit">[{{ vm.units }}]</span>
@@ -61,7 +61,7 @@ const selRegionName = computed(() =>
               :class="{ active: varStore.selVar === vn }"
               @click="varStore.selectVar(vn); varOpen = false"
             >
-              <span class="item-code">{{ vn }}</span>
+              <span class="item-code">{{ VARS[vn].display_name }}</span>
               <span class="item-name">{{ VARS[vn].long_name }}</span>
               <span class="item-unit">[{{ VARS[vn].units }}]</span>
             </button>

@@ -102,7 +102,7 @@ watch([cmName, () => varStore.selVar], drawGradient)
   <div class="legend-panel">
     <!-- Var info -->
     <div class="legend-header">
-      <span class="var-code">{{ vm.name }}</span>
+      <span class="var-code">{{ vm.display_name }}</span>
       <span class="var-name">{{ vm.long_name }}</span>
     </div>
     <button v-if="isKgVar" class="legend-unit unit-toggle" @click="toggleUnit">

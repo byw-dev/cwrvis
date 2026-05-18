@@ -85,7 +85,7 @@ const frameLabel = computed(() => {
       :show-history="true"
       :region-name="regionStore.selRegion.name"
       :frame-label="frameLabel"
-      :var-name="varStore.selVar"
+      :var-name="VARS[varStore.selVar].display_name"
       :value="currentValue"
       :unit="currentUnit"
       @clear="regionStore.selectRegion('xizang')"

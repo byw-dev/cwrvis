@@ -33,7 +33,7 @@ const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return allVars.value
   return allVars.value.filter(v =>
-    v.name.toLowerCase().includes(q) || v.long_name.includes(q)
+    v.display_name.toLowerCase().includes(q) || v.long_name.includes(q)
   )
 })
 
@@ -72,7 +72,7 @@ function select(name: VarName) {
         :class="{ active: varStore.selVar === v.name }"
         @click="select(v.name)"
       >
-        <span class="item-code">{{ v.name }}</span>
+        <span class="item-code">{{ v.display_name }}</span>
         <span class="item-name">{{ v.long_name }}</span>
         <span class="item-unit">[{{ v.units }}]</span>
       </li>

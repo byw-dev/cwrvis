@@ -128,7 +128,7 @@ const tableRows = computed(() => {
     const display = val === null ? '—'
       : Math.abs(val) >= 1e6 ? val.toExponential(3)
       : Number(val.toPrecision(4)).toString()
-    return { key: meta.name, longName: meta.long_name, unit, display }
+    return { key: meta.display_name, longName: meta.long_name, unit, display }
   })
 })
 
@@ -268,6 +268,7 @@ function updateChart() {
       inactiveColor: '#3b4a5e',
       pageIconColor: '#58e0ff',
       pageTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      formatter: (name: string) => VARS[name as VarName]?.display_name ?? name,
     },
     grid: { top: 24, right: gridRight, bottom: 60, left: 8, containLabel: true },
     tooltip: {
@@ -290,7 +291,7 @@ function updateChart() {
           const weight = isActive ? '600' : '400'
           html += `<div style="color:${fg};font-weight:${weight};line-height:1.6">` +
             `<span style="color:${p.color}">● </span>` +
-            `${p.seriesName}: ${valStr} ${effUnit(p.seriesName as VarName)}` +
+            `${VARS[p.seriesName as VarName]?.display_name ?? p.seriesName}: ${valStr} ${effUnit(p.seriesName as VarName)}` +
             `</div>`
         }
         return html
@@ -337,7 +338,8 @@ watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
 function exportCsv() {
   const tab  = TABS.find(t => t.key === activeTab.value)!
   const rows = regionStore.getCached(regionStore.selRegionId, tab.mode) ?? []
-  const varNames = VAR_LIST.map(v => v.name as VarName)
+  const varNames    = VAR_LIST.map(v => v.name as VarName)      // 数据 key，用于 row[key]
+  const displayNames = VAR_LIST.map(v => v.display_name)        // 展示用缩写，用于 CSV 列头
   const convert  = isKgToMm.value && area_m2.value !== null
 
   const timeColName = (
@@ -345,7 +347,7 @@ function exportCsv() {
       avg_monthly: 'month', avg_season: 'season' } as const
   )[activeTab.value]
 
-  const header = [timeColName, ...varNames].join(',')
+  const header = [timeColName, ...displayNames].join(',')
 
   const dataRows = rows.map(row => {
     let timeVal: string
@@ -416,7 +418,7 @@ function exportCsv() {
                   class="picker-item"
                   :disabled="activeVars.includes(vn)"
                   @click="addVar(vn)"
-                >{{ vn }} <span class="picker-name">{{ VARS[vn].long_name }}</span></button>
+                >{{ VARS[vn].display_name }} <span class="picker-name">{{ VARS[vn].long_name }}</span></button>
               </template>
             </div>
             <div v-if="varPickerOpen" class="picker-backdrop" @click="varPickerOpen = false" />
@@ -427,7 +429,7 @@ function exportCsv() {
             class="var-chip"
             :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
           >
-            {{ vn }}
+            {{ VARS[vn].display_name }}
             <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
           </span>
         </div>
