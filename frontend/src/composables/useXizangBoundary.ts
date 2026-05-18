@@ -33,6 +33,8 @@ export function useXizangBoundary() {
   const { map }   = useMap()
   const settings  = useSettingsStore()
 
+  let active = true  // 实例级标志，防止卸载后 initLayers 异步续体仍操作地图
+
   async function loadGeo(id: string): Promise<GeoJSON.FeatureCollection | null> {
     if (geoCache.has(id)) return geoCache.get(id)!
     try {
@@ -66,6 +68,8 @@ export function useXizangBoundary() {
   }
 
   async function initLayers(m: MaplibreMap): Promise<void> {
+    if (!active) return  // 卸载后 load 事件仍触发时（如切回已有图层）直接返回
+
     if (layersAdded) {
       if (settings.showXizangBoundary) showLayers(m)
       return
@@ -76,6 +80,7 @@ export function useXizangBoundary() {
       ...DISTRICT_IDS.map(id => loadGeo(id)),
     ])
 
+    if (!active) return  // GeoJSON 加载完成时组件可能已卸载
     if (!xizangGeo) return
 
     const prefFeatures: GeoJSON.Feature[] = []
@@ -136,5 +141,5 @@ export function useXizangBoundary() {
     },
   )
 
-  onUnmounted(() => { const m = map.value; if (m) hideLayers(m) })
+  onUnmounted(() => { active = false; const m = map.value; if (m) hideLayers(m) })
 }
