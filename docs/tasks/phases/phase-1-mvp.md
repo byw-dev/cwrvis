@@ -503,7 +503,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - **注意**：chart series name 保留旧 key（用于 VARS 元数据反向查找），仅在 legend formatter / tooltip 渲染时替换为 `display_name`
   - **后续**：全链路迁移完成后，删除 `display_name` 字段，见 backlog F-32/F-33
 
-- [ ] `TODO` **F-34** `[S]` 空间分布模块固定显示西藏自治区边界线（Enhancement）
+- [x] `DONE` **F-34** `[S]` 空间分布模块固定显示西藏自治区边界线（Enhancement）
   - **背景**：空间分布地图目前无任何行政边界参考，加上全区外轮廓 + 7 个地市内部分界线，方便识别格点数据的空间位置
   - **数据来源**：复用 `/shapes/` 静态端点（`xizang.geojson` + `lasa/rikaze/shannan/linzhi/changdu/naqu/ali.geojson`），GCJ-02 → WGS-84 坐标偏移逻辑与 `useRegionLayer` 一致
   - **实现方案**：新建 `useXizangBoundary.ts` composable（模块级单例，init/show/hide 与 `useRegionLayer` 同模式）；`GridModule.vue` 调用一行即可
