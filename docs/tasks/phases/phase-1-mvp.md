@@ -487,6 +487,22 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 因布局尺寸（`--h-nav` 等）已是 rem，组件高度自动跟随缩放；下拉菜单固定 `px` 宽度（`min-width: 180px` 等）需同步改为 `em`
   - `← needs: F-18（SettingsPanel 已有）`
 
+- [ ] `TODO` **F-31** `[M]` 变量显示名称重命名——临时展示层映射（Enhancement，见 DEC-018）
+  - **背景**：甲方要求对齐新命名规范，但上游数据文件暂时无法同步变更，采用临时展示层映射方案
+  - **核心改动**：`VarMeta` 新增 `display_name` 字段；前端所有用户可见处改用 `display_name`；数据访问层不变
+  - **涉及文件**（10 处）：
+    - `frontend/src/types/index.ts`：`VarGroupId` 更新、`VarMeta` 新增 `display_name`
+    - `frontend/src/config/vars.ts`：全部15变量补 `display_name`、更新 `long_name`、重写 `VAR_GROUPS`（5新组）
+    - `frontend/src/components/layout/LeftRail.vue`：ICONS key 对应新 VarGroupId，图标语义重映射
+    - `frontend/src/components/layout/SubToolbar.vue`：`name` → `display_name`
+    - `frontend/src/components/layout/CategoryFlyout.vue`：`name` → `display_name`
+    - `frontend/src/components/panels/Legend.vue`：`name` → `display_name`
+    - `frontend/src/components/modules/GridModule.vue` + `RegionModule.vue`：传给 Inspector 的 var-name prop
+    - `frontend/src/components/modals/RegionHistoryModal.vue`：legend formatter、tooltip、chips、picker、表格 key 列、CSV 列头
+    - `frontend/src/components/modals/HistoryModal.vue`：legend formatter、tooltip
+  - **注意**：chart series name 保留旧 key（用于 VARS 元数据反向查找），仅在 legend formatter / tooltip 渲染时替换为 `display_name`
+  - **后续**：全链路迁移完成后，删除 `display_name` 字段，见 backlog F-32/F-33
+
 ---
 
 ## D — Deploy / 部署与运维
@@ -518,9 +534,9 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 6 | 6 | 0 | 0 | 0 |
 | B 后端 | 7 | 7 | 0 | 0 | 0 |
-| F 前端 | 28 | 25 | 0 | 0 | 3 |
+| F 前端 | 29 | 25 | 0 | 1 | 3 |
 | D 部署 | 3 | 3 | 0 | 0 | 0 |
-| **合计** | **44** | **41** | **0** | **0** | **3** |
+| **合计** | **45** | **41** | **0** | **1** | **3** |
 
 > F BLOCKED 3 = F-22 / F-23 / F-24（格点等值线、高低点标注、数值标注；依赖技术方案决策）
 

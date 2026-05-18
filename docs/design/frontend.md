@@ -248,13 +248,17 @@ UI 组件库：不引入，CSS 完全手写（见「设计系统」节）。
 
 ### 变量分组定义
 
-| 分组 ID | 标签 | 变量列表 |
-|---------|------|---------|
-| `cwr` | 资源量 | SP, CWR |
-| `state` | 状态量 | aveMv, aveMh, GMv, GMh |
-| `flux` | 通量 | INv, OTv, INh, OTh |
-| `conv` | 转化 | MC, CEv, PEh |
-| `renew` | 更新期 | RCv, RCh |
+> ⚠️ **已变更（见 DEC-018）**：以下为更新后的分组定义，原分组（资源量/通量）已废止。变量英文缩写与中文名称的完整对照表见 `DECISIONS.md DEC-018`。
+
+| 分组 ID | 标签 | 数据 key（不变） | 展示缩写（display_name） |
+|---------|------|----------------|------------------------|
+| `state` | 状态量 | aveMv, aveMh | MMv, MMh |
+| `advection` | 平流量 | INv, OTv, INh, OTh | Qvi, Qvo, Qhi, Qho |
+| `conv` | 转化 | MC, SP, CEv, PEh | Cvh, Ps, CEv, PEh |
+| `total` | 总量 | GMv, GMh, CWR | GMv, GMh, CWR |
+| `renew` | 更新期 | RCv, RCh | RTv, RTh |
+
+> 注：`display_name` 为临时展示层字段（F-31），全链路迁移完成（F-32/F-33）后将删除，届时数据 key 将直接对齐新缩写。
 
 ### 飞出面板（CategoryFlyout）
 
