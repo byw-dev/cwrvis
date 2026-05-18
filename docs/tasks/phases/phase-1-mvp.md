@@ -194,7 +194,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - **重写** `GET /api/v1/report/download`：参数简化为 `region_id` + `year`（`"2000"`~`"2025"` 或 `"multi"`）；文件命名对齐甲方实际格式；安全控制：枚举白名单 + 正则校验 + 路径前缀断言（见 backend.md）
   - `← needs: S-07（static/reports/ 就绪后可完整测试）`
 
-- [ ] `TODO` **B-08** `[S]` `/report/download` 下载前模拟延迟
+- [x] `DONE` **B-08** `[S]` `/report/download` 下载前模拟延迟
   - 文件确认存在后（路径断言通过、`os.path.exists` 为真）、`FileResponse` 返回前，执行 `await asyncio.sleep(random.uniform(8, 12))`
   - 仅成功路径延迟；400 / 404 立即返回
   - 端点改为 `async def`；顶部 `import asyncio, random`
@@ -483,8 +483,8 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - **根字号改法**：`global.css` 中 `html { font-size: 16px }` → `font-size: 100%`，不写绝对像素
   - **缩放实现**：SettingsPanel 新增"界面大小"选项（radio），3 档：
     - 正常（`font-size: 100%`，浏览器默认 16px）
-    - 大（`font-size: 112.5%`，约 18px）
-    - 更大（`font-size: 125%`，约 20px）
+    - 大（`font-size: 125%`，约 20px）
+    - 更大（`font-size: 150%`，约 24px）
   - 选中后动态设置 `document.documentElement.style.fontSize`，持久化至 localStorage（key：`cwrvis:font_size`）
   - 因布局尺寸（`--h-nav` 等）已是 rem，组件高度自动跟随缩放；下拉菜单固定 `px` 宽度（`min-width: 180px` 等）需同步改为 `em`
   - `← needs: F-18（SettingsPanel 已有）`
