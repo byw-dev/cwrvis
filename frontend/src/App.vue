@@ -11,12 +11,14 @@ import GridModule from '@/components/modules/GridModule.vue'
 import RegionModule from '@/components/modules/RegionModule.vue'
 import ExportModule from '@/components/modules/ExportModule.vue'
 import SettingsPanel from '@/components/panels/SettingsPanel.vue'
+import HelpModal from '@/components/modals/HelpModal.vue'
 import type { ModuleId } from '@/types'
 
 const metaStore    = useMetaStore()
 const settingsStore = useSettingsStore()
 const activeModule = ref<ModuleId>('grid')
 const settingsOpen = ref(false)
+const helpOpen     = ref(false)
 
 watchEffect(() => {
   document.documentElement.style.fontSize = settingsStore.fontSize
@@ -45,6 +47,7 @@ const showMap = computed(() =>
       :active-module="activeModule"
       @update:active-module="activeModule = $event"
       @open-settings="settingsOpen = true"
+      @open-help="helpOpen = true"
     />
 
     <SubToolbar :active-module="activeModule" />
@@ -63,6 +66,7 @@ const showMap = computed(() =>
     <BottomBar v-if="showBottomBar" />
 
     <SettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+    <HelpModal     v-if="helpOpen"     @close="helpOpen = false" />
   </template>
 </template>
 

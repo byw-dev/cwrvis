@@ -5,6 +5,7 @@ const props  = defineProps<{ activeModule: ModuleId }>()
 const emit   = defineEmits<{
   'update:activeModule': [id: ModuleId]
   'open-settings': []
+  'open-help': []
 }>()
 
 function select(id: ModuleId) {
@@ -38,7 +39,7 @@ function select(id: ModuleId) {
 
     <!-- Right end -->
     <div class="pn-end">
-      <button class="ico" title="帮助" aria-label="帮助">?</button>
+      <button class="ico" title="帮助" aria-label="帮助" @click="emit('open-help')">?</button>
       <button class="ico" title="设置" aria-label="设置" @click="emit('open-settings')">⚙</button>
     </div>
   </nav>
