@@ -7,7 +7,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { useRegionStore } from '@/stores/region'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
-import { VARS, VAR_GROUPS } from '@/config/vars'
+import { VARS, VAR_GROUPS, VAR_LIST } from '@/config/vars'
 import { buildItems } from '@/stores/time'
 import { isKgToMm } from '@/composables/useGridLayer'
 import type { VarName, AggMode } from '@/types'
@@ -20,20 +20,48 @@ const regionStore = useRegionStore()
 const timeStore   = useTimeStore()
 const varStore    = useVarStore()
 
-type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'
+type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season' | 'avg_yearly'
 const TABS: { key: TabKey; label: string; mode: AggMode }[] = [
   { key: 'monthly',     label: '逐月',   mode: 'monthly'     },
   { key: 'yearly',      label: '逐年',   mode: 'yearly'      },
   { key: 'avg_monthly', label: '月平均', mode: 'avg_monthly' },
   { key: 'avg_season',  label: '季平均', mode: 'avg_season'  },
+  { key: 'avg_yearly',  label: '年平均', mode: 'avg_yearly'  },
 ]
 
 const activeTab    = ref<TabKey>('yearly')
+const isAvgYearly  = computed(() => activeTab.value === 'avg_yearly')
 const activeVars   = ref<VarName[]>([varStore.selVar])
 const varPickerOpen = ref(false)
 
-const chartEl = ref<HTMLDivElement>()
-const chart   = shallowRef<echarts.ECharts | null>(null)
+const chartEl  = ref<HTMLDivElement>()
+const chart    = shallowRef<echarts.ECharts | null>(null)
+let   outTimer: ReturnType<typeof setTimeout> | null = null
+
+function initChart(el: HTMLDivElement) {
+  chart.value?.dispose()
+  const c = echarts.init(el, null, { renderer: 'canvas' })
+  chart.value = c
+  c.on('click', (params: any) => {
+    const mode = TABS.find(t => t.key === activeTab.value)!.mode
+    timeStore.goToIndex(params.dataIndex)
+    const items = buildItems(mode)
+    if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
+  })
+  c.on('mouseover', (params: any) => {
+    if (outTimer) { clearTimeout(outTimer); outTimer = null }
+    if (params.componentType === 'series') hoveredSeries.value = params.seriesName
+  })
+  c.on('mouseout', (params: any) => {
+    if (params.componentType === 'series') {
+      outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
+    }
+  })
+  c.on('globalout', () => {
+    if (outTimer) { clearTimeout(outTimer); outTimer = null }
+    hoveredSeries.value = null
+  })
+}
 
 const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
 const SYMBOLS       = ['circle', 'rect', 'triangle', 'diamond', 'roundRect'] as const
@@ -73,12 +101,35 @@ async function ensureData(varName: VarName, mode: AggMode) {
 }
 
 async function loadActiveTab() {
-  const mode = TABS.find(t => t.key === activeTab.value)!.mode
+  const tab  = TABS.find(t => t.key === activeTab.value)!
+  const mode = tab.mode
+  if (isAvgYearly.value) {
+    await regionStore.loadStats(regionStore.selRegionId, 'avg_yearly')
+    return
+  }
   for (const vn of activeVars.value) {
     await ensureData(vn, mode)
   }
   updateChart()
 }
+
+// ── 年平均表格 ────────────────────────────────────────────────────────────────
+
+const tableRows = computed(() => {
+  const row = regionStore.getCached(regionStore.selRegionId, 'avg_yearly')?.[0] ?? null
+  return VAR_LIST.map(meta => {
+    const raw = row ? (row[meta.name] as number | null | undefined) : null
+    let val: number | null = typeof raw === 'number' ? raw : null
+    if (val !== null && convKg.value && meta.units === 'kg' && area_m2.value) {
+      val = val / area_m2.value
+    }
+    const unit = convKg.value && meta.units === 'kg' ? 'mm' : meta.units
+    const display = val === null ? '—'
+      : Math.abs(val) >= 1e6 ? val.toExponential(3)
+      : Number(val.toPrecision(4)).toString()
+    return { key: meta.name, longName: meta.long_name, unit, display }
+  })
+})
 
 async function addVar(vn: VarName) {
   if (activeVars.value.includes(vn)) return
@@ -263,35 +314,22 @@ function updateChart() {
 }
 
 onMounted(async () => {
-  if (chartEl.value) {
-    chart.value = echarts.init(chartEl.value, null, { renderer: 'canvas' })
-    chart.value.on('click', (params: any) => {
-      const mode = TABS.find(t => t.key === activeTab.value)!.mode
-      timeStore.goToIndex(params.dataIndex)
-      const items = buildItems(mode)
-      if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
-    })
-    let outTimer: ReturnType<typeof setTimeout> | null = null
-    chart.value.on('mouseover', (params: any) => {
-      if (outTimer) { clearTimeout(outTimer); outTimer = null }
-      if (params.componentType === 'series') hoveredSeries.value = params.seriesName
-    })
-    chart.value.on('mouseout', (params: any) => {
-      if (params.componentType === 'series') {
-        outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
-      }
-    })
-    chart.value.on('globalout', () => {
-      if (outTimer) { clearTimeout(outTimer); outTimer = null }
-      hoveredSeries.value = null
-    })
-    await loadActiveTab()
+  if (chartEl.value && !isAvgYearly.value) {
+    initChart(chartEl.value)
   }
+  await loadActiveTab()
 })
 
-watch(activeTab, loadActiveTab)
-watch(() => timeStore.currentIndex, updateChart)
-watch(isKgToMm, updateChart)
+watch(activeTab, async (newTab, oldTab) => {
+  // 从年平均切回折线 Tab：chartEl 是新元素，必须重建 chart 实例并重注册事件
+  if (newTab !== 'avg_yearly' && oldTab === 'avg_yearly') {
+    await nextTick()
+    if (chartEl.value) initChart(chartEl.value)
+  }
+  await loadActiveTab()
+})
+watch(() => timeStore.currentIndex, () => { if (!isAvgYearly.value) updateChart() })
+watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
 </script>
 
 <template>
@@ -317,8 +355,8 @@ watch(isKgToMm, updateChart)
           @click="activeTab = t.key"
         >{{ t.label }}</button>
 
-        <!-- Add button fixed on left, selected var chips grow to the right -->
-        <div class="var-chips">
+        <!-- Add button fixed on left, selected var chips grow to the right (hidden for avg_yearly) -->
+        <div v-if="!isAvgYearly" class="var-chips">
           <div class="dropdown-wrap" style="position: relative">
             <button class="add-var-btn" @click="varPickerOpen = !varPickerOpen">+ 添加变量</button>
             <div v-if="varPickerOpen" class="var-picker">
@@ -346,7 +384,28 @@ watch(isKgToMm, updateChart)
         </div>
       </div>
 
-      <div ref="chartEl" class="chart-area" />
+      <!-- 折线图（非年平均 Tab） -->
+      <div v-if="!isAvgYearly" ref="chartEl" class="chart-area" />
+
+      <!-- 静态表格（年平均 Tab） -->
+      <div v-else class="avg-table-wrap">
+        <table class="avg-table">
+          <thead>
+            <tr class="avg-head">
+              <th class="avg-th">变量</th>
+              <th class="avg-th">名称</th>
+              <th class="avg-th avg-th-val">数值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in tableRows" :key="row.key" class="avg-row">
+              <td class="avg-key">{{ row.key }}</td>
+              <td class="avg-name">{{ row.longName }}</td>
+              <td class="avg-val">{{ row.display }} <span class="avg-unit">{{ row.unit }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -427,4 +486,63 @@ watch(isKgToMm, updateChart)
 .picker-name { color: var(--fg-3); font-size: 0.625rem; }
 
 .chart-area { width: 100%; height: 460px; }
+
+.avg-table-wrap {
+  padding: 1.5em 2em;
+  overflow-y: auto;
+  max-height: 460px;
+}
+
+.avg-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.avg-row {
+  border-bottom: 1px solid var(--line-1);
+}
+.avg-row:last-child { border-bottom: none; }
+
+.avg-head { border-bottom: 1px solid var(--line-2); }
+
+.avg-th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--fg-2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 1em 0.5em 0;
+  font-weight: normal;
+  text-align: left;
+}
+.avg-th-val { text-align: right; padding-right: 0; }
+
+.avg-key {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  padding: 0.5em 1em 0.5em 0;
+  width: 5em;
+}
+
+.avg-name {
+  font-size: 0.75rem;
+  color: var(--fg-2);
+  padding: 0.5em 1em 0.5em 0;
+}
+
+.avg-val {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--fg-0);
+  padding: 0.5em 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.avg-unit {
+  font-size: 0.625rem;
+  color: var(--fg-3);
+  margin-left: 0.25em;
+}
 </style>
