@@ -4,11 +4,14 @@ import { onMounted, onUnmounted } from 'vue'
 const emit = defineEmits<{ close: [] }>()
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key === 'Escape') {
+    e.stopImmediatePropagation()
+    emit('close')
+  }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => window.addEventListener('keydown', onKeydown, true))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
 </script>
 
 <template>
