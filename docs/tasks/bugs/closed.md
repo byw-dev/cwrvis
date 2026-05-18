@@ -318,3 +318,73 @@
 **出现原因**：numpy 的 `nansum` 设计上对全 NaN 输入返回 0，需额外判断后替换为 NaN
 **修复方案**：用 `np.where(np.all(np.isnan(arr), axis=0), np.nan, np.nansum(arr, axis=0))` 替代裸 `nansum`，全 NaN 格点直接填 NaN。修复后需重新运行 `make data-grid`
 **修复记录**：cabfff9 — fix(scripts): BUG-25 mean_season 季节聚合全 NaN 格点保持 NaN
+
+---
+
+## BUG-22 · 年平均表格 kg→mm 开关在当前变量为非 kg 时被隐藏
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：当前变量为非 kg 时打开历史弹窗 → 年平均 Tab，kg→mm 开关消失
+**期望行为**：年平均 Tab 始终显示 kg→mm 开关（表格含全部 15 个变量）
+**实际行为**：`v-if="anyKgVar"` 依赖当前选中变量，非 kg 变量时为 false，开关被隐藏
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：`anyKgVar` 基于 `activeVars`（图表已选变量）设计，未考虑年平均 Tab 渲染全量变量的场景
+**修复方案**：将按钮 `v-if` 改为 `(isAvgYearly || anyKgVar) && area_m2 !== null`，年平均 Tab 始终满足条件
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-23 · CSV 导出在数据未加载时静默输出仅含表头的空文件
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：切换到未加载过的 Tab 后立即点击"导出 CSV"
+**期望行为**：数据未就绪时禁用导出按钮
+**实际行为**：`getCached` 返回 null 被 `??[]` 降级为空数组，静默生成仅含表头的文件
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：exportCsv 未区分"未加载"和"空数据"两种状态
+**修复方案**：新增 `csvDataReady` computed（检查当前 Tab 缓存是否非 null），按钮加 `:disabled="!csvDataReady"` 及禁用样式
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-27 · RegionHistoryModal 点击图表跳帧时 goToIndex 在 setMode 之前调用
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：当前为逐月模式，历史弹窗切到逐年 Tab 后点击折线图数据点
+**期望行为**：主地图切换到对应年份的逐年帧
+**实际行为**：以旧 mode（逐月）的帧列表解释 dataIndex，跳转到错误帧
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：click handler 先调用 `goToIndex`（以当前 mode 解释索引），再调用 `setMode`，顺序颠倒
+**修复方案**：重排为先 `setMode(mode)` 再 `goToIndex(params.dataIndex)`，并仅在 item 存在时执行
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-29 · ExportModule 进度条定时器在组件卸载时未清除
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：触发报告下载后立即切换到其他模块
+**期望行为**：组件卸载时清除进度条 interval
+**实际行为**：`clearInterval` 仅在下载 Promise 完成时执行，卸载后 interval 持续运行
+**相关文件**：`frontend/src/components/modules/ExportModule.vue`
+**出现原因**：未注册 `onUnmounted` 清理钩子
+**修复方案**：新增 `onUnmounted(() => { if (_timer) { clearInterval(_timer); _timer = null } })`
+**修复记录**：f1d7d8a — fix(frontend): BUG-29 ExportModule 组件卸载时清除进度条定时器
+
+---
+
+## BUG-30 · HelpModal 全局 Escape 监听与 GridModule 的 Escape 处理冲突
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：在空间分布模块选取格点后打开帮助弹窗，按 Esc 关闭
+**期望行为**：Esc 仅关闭帮助弹窗
+**实际行为**：同时触发 GridModule 的 clearPick()，意外清除已选取值点
+**相关文件**：`frontend/src/components/modals/HelpModal.vue`
+**出现原因**：两者均在 window 上以冒泡阶段注册 keydown 监听；GridModule 先注册故先执行，`stopImmediatePropagation` 对已执行的处理器无效
+**修复方案**：HelpModal 改用捕获阶段（`addEventListener('keydown', handler, true)`）；捕获阶段先于冒泡阶段执行，`stopImmediatePropagation` 可阻止 GridModule 的冒泡阶段处理器运行
+**修复记录**：444326f — fix(frontend): BUG-30 改用捕获阶段注册 Escape 监听，确保先于 GridModule 处理
