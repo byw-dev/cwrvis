@@ -1,22 +1,54 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const emit = defineEmits<{ close: [] }>()
+
+const modalRef = ref<HTMLElement>()
+let prevFocus: HTMLElement | null = null
+
+function getFocusable(): HTMLElement[] {
+  if (!modalRef.value) return []
+  return Array.from(
+    modalRef.value.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter(el => !el.hasAttribute('disabled'))
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     e.stopImmediatePropagation()
     emit('close')
+    return
+  }
+  if (e.key === 'Tab') {
+    const focusable = getFocusable()
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last  = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus() }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first.focus() }
+    }
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown, true))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
+onMounted(() => {
+  prevFocus = document.activeElement as HTMLElement | null
+  getFocusable()[0]?.focus()
+  window.addEventListener('keydown', onKeydown, true)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown, true)
+  prevFocus?.focus()
+})
 </script>
 
 <template>
   <div class="help-overlay" @click.self="$emit('close')">
-    <div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div ref="modalRef" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
 
       <!-- Header -->
       <div class="help-head">
