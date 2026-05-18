@@ -120,9 +120,9 @@ export interface ModuleDef {
 }
 
 export const MODULE_LIST: ModuleDef[] = [
-  { id: 'grid',   label: '格点数据' },
-  { id: 'region', label: '区域统计' },
-  { id: 'export', label: '数据导出' },
+  { id: 'grid',   label: '空间分布' },
+  { id: 'region', label: '区域评估' },
+  { id: 'export', label: '报告制作' },
 ]
 
 // ─── API response envelope ───────────────────────────────────────────────────

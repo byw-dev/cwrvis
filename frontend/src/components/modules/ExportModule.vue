@@ -86,7 +86,7 @@ async function download() {
 <template>
   <div class="export-wrap">
     <div class="export-card">
-      <div class="export-title">数据导出</div>
+      <div class="export-title">报告制作</div>
 
       <div v-if="metaLoading" class="meta-state">加载报告目录…</div>
       <div v-else-if="metaError" class="meta-state error">{{ metaError }}</div>

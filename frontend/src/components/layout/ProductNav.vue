@@ -20,8 +20,8 @@ function select(id: ModuleId) {
         <polygon points="9,0 18,6.3 14.4,18 3.6,18 0,6.3" fill="var(--accent)" />
       </svg>
       <div class="text">
-        <span class="t">云水资源数据平台</span>
-        <span class="s">CWR · DATA PLATFORM v0.1</span>
+        <span class="t">云水资源显示分析平台</span>
+        <span class="s">CWR · DATA PLATFORM v1.0</span>
       </div>
     </div>
 

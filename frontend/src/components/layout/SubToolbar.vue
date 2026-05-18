@@ -74,7 +74,6 @@ const selRegionName = computed(() =>
 
       <!-- Raw modes -->
       <div class="mode-group">
-        <span class="mode-group-label">原始</span>
         <button
           v-for="m in AGG_MODES_RAW" :key="m"
           class="mode-btn"
@@ -85,7 +84,6 @@ const selRegionName = computed(() =>
 
       <!-- Stat modes -->
       <div class="mode-group">
-        <span class="mode-group-label">统计</span>
         <button
           v-for="m in AGG_MODES_STAT" :key="m"
           class="mode-btn"
