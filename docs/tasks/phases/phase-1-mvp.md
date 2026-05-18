@@ -194,6 +194,13 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - **重写** `GET /api/v1/report/download`：参数简化为 `region_id` + `year`（`"2000"`~`"2025"` 或 `"multi"`）；文件命名对齐甲方实际格式；安全控制：枚举白名单 + 正则校验 + 路径前缀断言（见 backend.md）
   - `← needs: S-07（static/reports/ 就绪后可完整测试）`
 
+- [ ] `TODO` **B-08** `[S]` `/report/download` 下载前模拟延迟
+  - 文件确认存在后（路径断言通过、`os.path.exists` 为真）、`FileResponse` 返回前，执行 `await asyncio.sleep(random.uniform(8, 12))`
+  - 仅成功路径延迟；400 / 404 立即返回
+  - 端点改为 `async def`；顶部 `import asyncio, random`
+  - `← needs: B-07`
+  - `→ needed by: F-29`
+
 - [x] `DONE` **B-04** `[S]` `/api/v1/meta/regions` 接口（`routers/meta.py`）
   - 从 `REGION_MAP` 硬编码返回区域列表（`region_id`、`name`、`level`）
   - 无数据库查询
@@ -381,6 +388,46 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 后端 404 → 行内错误提示；meta 加载失败 → 提示占位
   - `← needs: B-07, F-17`
 
+- [ ] `TODO` **F-29** `[S]` ExportModule 伪进度条遮罩（Enhancement）
+  - 点击"下载报告"后，在模块区域内显示加载遮罩：
+    - 文字："正在生成报告，请稍候..."
+    - 伪进度条：JS `setInterval` 驱动，约 9s 内线性推进至 90%，随后停在 90% 等待后端响应
+    - 下载按钮在遮罩显示期间禁用（不可重复触发）
+  - fetch 响应到达后：
+    - 成功（200）：进度条跳至 100%，`setTimeout(300ms)` 后触发浏览器下载，关闭遮罩
+    - 失败（404/400）：立即关闭遮罩，显示现有行内错误提示（不延迟）
+  - 帮助文本同步简化：`"ℹ 报告为 .docx 格式，由数据团队预生成。若所选组合暂无报告，将在此处提示..."` → `"ℹ 报告为 .docx 格式。"`
+  - `← needs: B-08`
+
+- [ ] `TODO` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格（Enhancement）
+  - TABS 末尾追加 `{ key: 'avg_yearly', label: '年平均', mode: 'avg_yearly' }`
+  - `activeTab === 'avg_yearly'` 时：隐藏 ECharts 图表 + "追加变量"按钮 + 当前帧竖线；改为渲染 `<table>`：
+    - **第一列**：变量英文 key（如 `SP`）；hover 时 tooltip 显示中文名 + 单位（来自 `frontend/src/config/vars.ts`）
+    - **第二列**：数值，格式与图表 tooltip 一致；`null` → `—`
+    - kg→mm 开关对 KG_VARS 生效（`value / area_m2`）；其余变量不换算
+    - 行数 = 15，顺序与 vars.ts 定义顺序一致
+  - 数据来源：`loadStats(regionId, 'avg_yearly')` → 后端 `mean_all` → 单行，直接读字段值
+  - `← needs: F-16, B-05`
+
+- [ ] `TODO` **F-28** `[S]` RegionHistoryModal CSV 导出（Enhancement）
+  - 模态框标题栏右侧新增"⬇ 导出 CSV"按钮（与关闭按钮并列）
+  - 点击时从 statsCache 取当前 Tab 已加载数据（无需额外请求），构建 CSV 字符串：
+    - **第一列**（时间列）：
+      | Tab | 列头 | 值格式 |
+      |-----|------|--------|
+      | 逐年 | `year` | `YYYY` |
+      | 逐月 | `year_month` | `YYYY-MM` |
+      | 年平均 | `period` | `"2000-2025"` |
+      | 月平均 | `month` | `1`…`12` |
+      | 季平均 | `season` | `spring/summer/autumn/winter` |
+    - **其余15列**：英文 key（`SP, CWR, aveMv, ...`），顺序与 vars.ts 一致
+    - 值：kg→mm 开关对 KG_VARS 生效；`null` → 空字符串
+    - 编码：UTF-8（内容全 ASCII，无乱码风险）
+  - 文件名：`{regionName}-{modeLabel}-云水资源数据.csv`
+    - `regionName`：取 `metaStore.regions` 中对应 `name` 字段（中文，如"阿里地区"）
+    - `modeLabel`：当前 Tab label（逐月/逐年/年平均/月平均/季平均）
+  - `← needs: F-16, B-05`
+
 - [x] `DONE` **F-18** `[S]` SettingsPanel（用户设置）
   - Overlay 面板（点击遮罩关闭）
   - 底图选择：4 个 radio，选中立即生效（`settings.basemap` → `useMap` 响应）
@@ -425,6 +472,21 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - `← needs: B-05, F-16`
   - ← **BLOCKED**：随 F-22/F-23 一并推迟，见 backlog
 
+- [ ] `TODO` **F-30** `[M]` 界面字号与尺寸缩放设置（Enhancement）
+  - 用户反馈：默认字号偏小，在大屏/投影场景下不易阅读
+  - **前置清理**：将所有组件内硬编码的 `px` 字号改为 `em`，覆盖文件：
+    - `CategoryFlyout.vue`：8 处（10px/11px/12px）
+    - `BottomBar.vue`：2 处（9px/10px）
+    - `RegionModule.vue`、`PlaceholderModule.vue`：各少量
+  - **根字号改法**：`global.css` 中 `html { font-size: 16px }` → `font-size: 100%`，不写绝对像素
+  - **缩放实现**：SettingsPanel 新增"界面大小"选项（radio），3 档：
+    - 正常（`font-size: 100%`，浏览器默认 16px）
+    - 大（`font-size: 112.5%`，约 18px）
+    - 更大（`font-size: 125%`，约 20px）
+  - 选中后动态设置 `document.documentElement.style.fontSize`，持久化至 localStorage（key：`cwrvis:font-size`）
+  - 因布局尺寸（`--h-nav` 等）已是 rem，组件高度自动跟随缩放；下拉菜单固定 `px` 宽度（`min-width: 180px` 等）需同步改为 `em`
+  - `← needs: F-18（SettingsPanel 已有）`
+
 ---
 
 ## D — Deploy / 部署与运维
@@ -455,9 +517,11 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 6 | 6 | 0 | 0 | 0 |
-| B 后端 | 6 | 6 | 0 | 0 | 0 |
-| F 前端 | 24 | 20 | 0 | 4 | 0 |
-| D 部署 | 3 | 1 | 0 | 2 | 0 |
-| **合计** | **39** | **33** | **0** | **6** | **0** |
+| B 后端 | 7 | 6 | 0 | 1 | 0 |
+| F 前端 | 28 | 20 | 0 | 8 | 0 |
+| D 部署 | 3 | 3 | 0 | 0 | 0 |
+| **合计** | **44** | **35** | **0** | **9** | **0** |
 
-**预估剩余工时**（单人）：约 4–6 天（F-21~F-24 前端叠加层 + D-02/D-03 部署）
+> F TODO 8 = F-21（聚合层备用）+ F-22 BLOCKED + F-23 BLOCKED + F-24 BLOCKED + F-27 + F-28 + F-29 + F-30
+
+**预估剩余工时**（单人）：约 2.5 天（B-08 + F-27/F-28/F-29/F-30 + Tweaks；F-22~F-24 已挂起）
