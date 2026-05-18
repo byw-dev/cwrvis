@@ -1,7 +1,128 @@
 # 部署与运维设计 — cwrvis
 
-> 文档版本：v1.0  
-> 对应模块：`deploy/`
+> 文档版本：v2.0  
+> 对应模块：`bin/`、`deploy/`
+
+---
+
+## 部署理念
+
+**单进程、单压缩包、离线可用**。FastAPI 同时承担 REST API 与静态文件服务，无需 Nginx。
+
+分发包内预嵌 Linux x86_64 wheel 缓存，目标机只需安装 `uv`，**无需网络**即可完成依赖安装和启动。构建机（macOS / Linux 均可）在 `make package` 时同时指定 `manylinux_2_17_x86_64` 和 `manylinux_2_28_x86_64` 两个 platform tag 预取 Linux wheel（不同包使用不同 ABI，两个 tag 的 wheel 均兼容 Ubuntu 20.04+），实现"在 macOS 构建、Linux 离线运行"。
+
+---
+
+## 分发包结构
+
+```
+cwrvis-{version}/
+├── bin/
+│   ├── start.sh          # 启动服务（首次自动建 venv，支持离线）
+│   └── stop.sh           # 停止服务（读 PID 文件）
+├── app/                  # FastAPI 应用代码（来自仓库 backend/）
+│   ├── main.py
+│   ├── routers/
+│   ├── pyproject.toml
+│   ├── requirements.txt  # uv export 生成的锁定依赖清单（供离线安装使用）
+│   └── wheels/           # Linux x86_64 wheel 缓存（make package 时预取）
+├── static/               # FastAPI StaticFiles 托管目录（对外可访问）
+│   ├── grid/             # 格点 JSON + meta.json（预生成，约 33MB）
+│   ├── shapes/           # 区域 GeoJSON（region_id 命名）
+│   ├── reports/          # 预生成 .docx 报告
+│   └── web/              # 前端 pnpm build 产物
+├── db/                   # 仅 FastAPI 内部访问，不挂载为静态路由
+│   └── stats.db
+├── conf/
+│   └── config.env        # 环境变量，start.sh 启动时加载
+└── logs/                 # 运行日志（空目录占位）
+```
+
+---
+
+## FastAPI 静态文件挂载策略
+
+```python
+# app/main.py（顺序不可颠倒，/ 须最后挂载）
+app.mount("/grid",    StaticFiles(directory="../static/grid"),          name="grid")
+app.mount("/reports", StaticFiles(directory="../static/reports"),       name="reports")
+app.mount("/",        StaticFiles(directory="../static/web", html=True), name="web")
+
+# db/ 不挂载，通过环境变量 DB_PATH 在代码中访问
+```
+
+路径约定：
+- `/grid/meta.json`、`/grid/year/{var}.json`、`/grid/month/{var}.json`
+- `/reports/{filename}.docx`
+- `/api/v1/**`（REST API）
+
+---
+
+## 启动脚本
+
+**`bin/start.sh`**（首次自动建 venv，优先离线 wheel 缓存）：
+```bash
+#!/usr/bin/env bash
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="$ROOT/app"
+VENV="$APP/.venv"
+
+[ -f "$ROOT/conf/config.env" ] && source "$ROOT/conf/config.env"
+
+# 首次启动：建 venv 并安装依赖（优先离线 wheels/，否则在线）
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "[cwrvis] 初始化 Python 虚拟环境..."
+    uv venv "$VENV"
+    if [ -d "$APP/wheels" ] && [ -f "$APP/requirements.txt" ]; then
+        echo "[cwrvis] 离线安装依赖（使用内嵌 wheel 缓存）..."
+        uv pip install --python "$VENV/bin/python" \
+            --no-index --find-links "$APP/wheels" \
+            -r "$APP/requirements.txt"
+    else
+        echo "[cwrvis] 在线安装依赖（需要网络）..."
+        uv pip install --python "$VENV/bin/python" "$APP"
+    fi
+fi
+
+mkdir -p "$ROOT/logs"
+cd "$APP"
+
+"$VENV/bin/python" -m uvicorn main:app \
+    --host 0.0.0.0 \
+    --port "${PORT:-8000}" \
+    --workers 2 \
+    --log-level info \
+    >> "$ROOT/logs/app.log" 2>&1 &
+
+echo $! > "$ROOT/logs/app.pid"
+echo "cwrvis started  (pid=$(cat "$ROOT/logs/app.pid")  port=${PORT:-8000})"
+```
+
+**`bin/stop.sh`**：
+```bash
+#!/usr/bin/env bash
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PID_FILE="$ROOT/logs/app.pid"
+if [ -f "$PID_FILE" ]; then
+    kill "$(cat "$PID_FILE")" && rm "$PID_FILE"
+    echo "cwrvis stopped"
+else
+    echo "no pid file found"
+fi
+```
+
+---
+
+## 环境变量（`conf/config.env`）
+
+```bash
+PORT=8000
+DB_PATH=../db/stats.db
+STATIC_ROOT=../static
+REPORT_DIR=../static/reports
+GRID_DIR=../static/grid
+```
 
 ---
 
@@ -9,136 +130,30 @@
 
 | 项目 | 最低配置（演示） | 说明 |
 |------|-----------------|------|
-| CPU | 2 核 | 后端几乎无计算，Nginx 静态文件服务主导 |
-| 内存 | 4 GB | 系统 + Nginx + FastAPI（2 worker） |
-| 磁盘 | 50 GB SSD | 静态文件约 800MB，系统和日志留足余量 |
-| 带宽 | 5 Mbps | 单用户加载一个 var 全年切片约 1.25MB，可接受 |
+| CPU | 2 核 | 后端几乎无计算，静态文件 I/O 主导 |
+| 内存 | 2 GB | 系统 + uvicorn 2 worker（各 ~80MB） |
+| 磁盘 | 20 GB SSD | 静态数据约 100MB，系统和日志留余量 |
+| 带宽 | 5 Mbps | 单用户加载一个 var 月颗粒度切片约 2MB |
 | 操作系统 | Linux（Ubuntu 22.04 推荐） | |
 
 ---
 
-## 进程架构
+## 进程管理（systemd，可选）
 
-```
-Internet
-    │
-    ▼
- Nginx :80 / :443
-    │
-    ├── /                     → frontend/dist/（静态托管）
-    ├── /static/              → /data/static/（静态文件托管）
-    │     ├── grid/**/*.json  （格点数据）
-    │     ├── reports/*.docx  （预生成报告）
-    │     ├── meta/vars.json  （var 元数据）
-    │     └── db/stats.db     （SQLite，只后端使用，不对外暴露）
-    │
-    └── /api/                 → 反向代理 → FastAPI :8000
-```
-
-> **注意**：`/data/static/db/` 目录不得通过 Nginx 对外暴露，仅后端进程读取。
-
----
-
-## 目录结构（服务器）
-
-```
-/
-├── srv/cwrvis/
-│   ├── backend/             # FastAPI 应用代码
-│   ├── frontend/dist/       # Vue 构建产物
-│   └── deploy/              # 部署配置文件（nginx.conf、systemd units）
-│
-└── data/
-    └── static/
-        ├── grid/            # 格点 JSON 切片（约 800MB）
-        ├── reports/         # 预生成 docx 报告
-        ├── meta/
-        │   └── vars.json    # var 元数据
-        └── db/
-            └── stats.db     # SQLite 区域统计数据库
-```
-
-`/data/` 与应用代码分离，便于数据更新时不影响代码部署。
-
----
-
-## Nginx 配置（`deploy/nginx.conf`）
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;  # 替换为实际域名或 IP
-
-    # 前端静态文件
-    location / {
-        root /srv/cwrvis/frontend/dist;
-        index index.html;
-        try_files $uri $uri/ /index.html;  # SPA 路由支持
-        expires 1h;
-        add_header Cache-Control "public, must-revalidate";
-    }
-
-    # 格点 JSON 静态文件（较大，缓存时间长）
-    location /static/grid/ {
-        alias /data/static/grid/;
-        expires 7d;
-        add_header Cache-Control "public, immutable";
-        add_header Access-Control-Allow-Origin "*";
-    }
-
-    # 报告 docx 文件
-    location /static/reports/ {
-        alias /data/static/reports/;
-        expires 1d;
-        add_header Cache-Control "public";
-    }
-
-    # var 元数据
-    location /static/meta/ {
-        alias /data/static/meta/;
-        expires 1h;
-        add_header Cache-Control "public";
-    }
-
-    # 禁止直接访问数据库文件
-    location /data/static/db/ {
-        deny all;
-    }
-
-    # FastAPI 后端代理
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 30s;
-    }
-}
-```
-
-若需要 HTTPS，在 Nginx 配置中启用 SSL，推荐使用 Let's Encrypt（certbot）。
-
----
-
-## FastAPI 进程管理（systemd）
-
-文件：`deploy/systemd/cwrvis-backend.service`
+文件：`deploy/systemd/cwrvis.service`
 
 ```ini
 [Unit]
-Description=cwrvis FastAPI Backend
+Description=cwrvis Web Service
 After=network.target
 
 [Service]
-Type=simple
+Type=forking
 User=www-data
-WorkingDirectory=/srv/cwrvis/backend
-Environment="PATH=/srv/cwrvis/venv/bin"
-ExecStart=/srv/cwrvis/venv/bin/uvicorn main:app \
-    --host 127.0.0.1 \
-    --port 8000 \
-    --workers 2 \
-    --log-level info
+WorkingDirectory=/opt/cwrvis
+ExecStart=/opt/cwrvis/bin/start.sh
+ExecStop=/opt/cwrvis/bin/stop.sh
+PIDFile=/opt/cwrvis/logs/app.pid
 Restart=on-failure
 RestartSec=5
 
@@ -146,11 +161,11 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-启用与启动：
+启用：
 ```bash
-sudo systemctl enable cwrvis-backend
-sudo systemctl start cwrvis-backend
-sudo systemctl status cwrvis-backend
+sudo cp deploy/systemd/cwrvis.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cwrvis
 ```
 
 ---
@@ -160,114 +175,162 @@ sudo systemctl status cwrvis-backend
 ### 首次部署
 
 ```bash
-# 1. 安装系统依赖
-sudo apt update && sudo apt install -y python3.11 python3.11-venv nginx
+# 0. 构建机（开发机）打包（需已运行 make setup 初始化环境）
+make package VERSION=1.0.0
+# 产物：dist/cwrvis-1.0.0.tar.gz（内含 wheels/ 缓存，支持离线安装）
 
-# 2. 创建应用目录
-sudo mkdir -p /srv/cwrvis /data/static/{grid,reports,meta,db}
-sudo chown -R $USER:$USER /srv/cwrvis /data/static
+# 1. 目标机安装 uv（仅首次，约 5s）
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 3. 克隆代码
-git clone <repo-url> /srv/cwrvis
+# 2. 上传并解压分发包
+scp dist/cwrvis-1.0.0.tar.gz user@server:/opt/
+ssh user@server "cd /opt && tar xf cwrvis-1.0.0.tar.gz && ln -sfn cwrvis-1.0.0 cwrvis"
 
-# 4. 后端 Python 环境
-cd /srv/cwrvis
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r backend/requirements.txt
+# 3. 配置环境变量（按需修改 PORT 等）
+vim /opt/cwrvis/conf/config.env
 
-# 5. 前端构建
-cd /srv/cwrvis/frontend
-npm install
-npm run build
+# 4. 启动（首次自动离线安装依赖，约 10s）
+/opt/cwrvis/bin/start.sh
 
-# 6. 配置环境变量
-cp backend/.env.example backend/.env
-# 编辑 backend/.env，填写实际路径
-
-# 7. 复制预生成静态数据（在数据机器上已生成）
-# rsync -av /path/to/static/ user@server:/data/static/
-
-# 8. 配置 Nginx
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/cwrvis
-sudo ln -s /etc/nginx/sites-available/cwrvis /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-# 9. 配置 systemd
-sudo cp deploy/systemd/cwrvis-backend.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now cwrvis-backend
+# 5. 验证
+curl http://localhost:8000/api/v1/health
 ```
 
-### 代码更新部署
+### 应用代码更新
 
 ```bash
-cd /srv/cwrvis
-git pull
-
-# 更新后端依赖（如有变化）
-source venv/bin/activate
-pip install -r backend/requirements.txt
-
-# 重新构建前端
-cd frontend && npm install && npm run build
-
-# 重启后端
-sudo systemctl restart cwrvis-backend
-
-# Nginx 无需重启（静态文件变化自动生效）
+# 上传新版本包，解压后替换 app/ 目录
+/opt/cwrvis/bin/stop.sh
+rsync -av cwrvis-{new-version}/app/ user@server:/opt/cwrvis/app/
+ssh user@server "/opt/cwrvis/bin/start.sh"
 ```
 
 ### 静态数据更新
 
 ```bash
-# 在数据机器上重新运行预生成脚本
-python scripts/netcdf_to_json.py ...
-python scripts/netcdf_to_sqlite.py ...
-
-# 同步到服务器
-rsync -av --progress /path/to/static/grid/ user@server:/data/static/grid/
-rsync -av /path/to/static/db/ user@server:/data/static/db/
-
-# 后端无需重启（SQLite 每次请求重新读取）
-# Nginx 缓存在 Cache-Control 过期后自动刷新
-```
-
----
-
-## 日志
-
-后端日志：由 systemd journal 管理
-```bash
-journalctl -u cwrvis-backend -f
-```
-
-Nginx 日志：
-```
-/var/log/nginx/access.log
-/var/log/nginx/error.log
+# 在开发机重新运行预生成脚本（见 data-pipeline.md）
+# 同步到服务器，无需重启服务
+rsync -av output/static/grid/ user@server:/opt/cwrvis/static/grid/
+rsync -av output/static/db/   user@server:/opt/cwrvis/db/
 ```
 
 ---
 
 ## 健康检查
 
-后端提供简单健康检查端点：
 ```
 GET /api/v1/health
-→ { "ok": true, "status": "healthy" }
+→ { "ok": true }
 ```
-
-可配置为 Nginx upstream health check 或监控系统探针。
 
 ---
 
-## 资源使用预估（稳定运行）
+## 日志
 
-| 资源 | 预估值 |
-|------|--------|
-| FastAPI 内存 | 2 worker × ~80MB = ~160MB |
-| Nginx 内存 | ~30MB |
-| 磁盘 IO | 低（静态文件有 OS 页面缓存） |
-| CPU（空闲） | < 5% |
-| CPU（活跃请求） | < 20%（主要是 Nginx 文件传输） |
+```bash
+# 实时跟踪
+tail -f /opt/cwrvis/logs/app.log
+
+# systemd 方式
+journalctl -u cwrvis -f
+```
+
+---
+
+## 网络配置
+
+### 方案 A：直接暴露端口（内网演示 / 临时）
+
+直接开放 8000 端口，无需额外组件：
+
+```bash
+# Ubuntu UFW 防火墙
+sudo ufw allow 8000/tcp
+sudo ufw reload
+```
+
+访问地址：`http://<server-ip>:8000`
+
+**适用场景**：内网环境、甲方验收演示（无 HTTPS 要求）。
+
+---
+
+### 方案 B：Nginx 反向代理 + HTTPS（推荐生产环境）
+
+FastAPI 监听本地 8000，Nginx 负责 HTTPS 终止和端口转发：
+
+```nginx
+# /etc/nginx/sites-available/cwrvis
+server {
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    # 格点 JSON 大文件（最大约 2MB）
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+```bash
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/cwrvis /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# 申请免费证书（需域名已解析）
+sudo certbot --nginx -d example.com
+```
+
+> **注意**：使用 Nginx 后 `config.env` 中的 `PORT` 保持 8000（仅本地监听），防火墙**只开放 80/443**，关闭 8000 对外访问。
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw deny 8000/tcp
+sudo ufw reload
+```
+
+---
+
+### 防火墙端口汇总
+
+| 端口 | 用途 | 方案 A | 方案 B |
+|------|------|--------|--------|
+| 22 | SSH | 开放 | 开放 |
+| 80 | HTTP（重定向） | 可选 | 开放 |
+| 443 | HTTPS | — | 开放 |
+| 8000 | FastAPI（直接访问） | 开放 | **关闭** |
+
+---
+
+### 常见问题
+
+**启动后无法访问**
+1. 检查进程：`cat /opt/cwrvis/logs/app.pid` → `ps aux | grep uvicorn`
+2. 检查端口：`ss -tlnp | grep 8000`
+3. 检查防火墙：`sudo ufw status`
+4. 检查日志：`tail -50 /opt/cwrvis/logs/app.log`
+
+**依赖安装失败（离线环境）**
+- 确认 `app/wheels/` 目录非空：`ls /opt/cwrvis/app/wheels/ | wc -l`（应有数十个文件）
+- 若 wheels 不完整，在有网络的机器重新 `make package` 后上传
+
+**重启后服务未自动启动**
+- 确认 systemd 已启用：`sudo systemctl is-enabled cwrvis`
+- 若未启用：`sudo systemctl enable cwrvis`

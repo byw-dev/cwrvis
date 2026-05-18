@@ -77,3 +77,31 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 *.log
+
+# 原始 netcdf 数据（体积大，不入库）
+data/nc/
+
+# 甲方预生成报告文档（体积大，不入库；需手动放置后运行 make data-reports）
+data/docx/
+
+# 外部提供的预计算 CSV 数据（不入库）
+data/csv/
+
+# Claude Code 工作目录（本地会话记忆，不共享）
+.claude/
+
+# 预生成输出（由脚本生成，不入库）
+output/
+
+# 离线脚本生成的静态资产
+static/grid/
+static/shapes/
+static/reports/
+static/web/
+
+# SQLite 数据库（离线脚本生成）
+db/
+
+# 分发压缩包
+dist/
+backend/build_info.json

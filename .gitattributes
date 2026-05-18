@@ -1,0 +1,22 @@
+# Normalize line endings in Git's object store to LF for all text files.
+# Checkout behavior follows the OS default (CRLF on Windows, LF elsewhere).
+* text=auto
+
+# Force LF for files that must be LF everywhere (scripts, data, config).
+*.py   text eol=lf
+*.ts   text eol=lf
+*.vue  text eol=lf
+*.json text eol=lf
+*.csv  text eol=lf
+*.md   text eol=lf
+*.env  text eol=lf
+*.toml text eol=lf
+Makefile text eol=lf
+
+# Binary — never touch line endings.
+*.docx binary
+*.nc   binary
+*.db   binary
+*.png  binary
+*.jpg  binary
+*.ico  binary

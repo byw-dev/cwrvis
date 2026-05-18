@@ -1,0 +1,31 @@
+{
+  "grid": {
+    "lat": [39.5,38.5,37.5,36.5,35.5,34.5,33.5,32.5,31.5,30.5,29.5,28.5,27.5,26.5,25.5],
+    "lon": [75.5,76.5,77.5,78.5,79.5,80.5,81.5,82.5,83.5,84.5,85.5,86.5,87.5,88.5,89.5,90.5,91.5,92.5,93.5,94.5,95.5,96.5,97.5,98.5,99.5],
+    "dxy": []
+  },
+  "timeline": {
+    "year": [2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025],
+    "month": [],
+    "mean_all": ["mean"],
+    "mean_month": [1,2,3,4,5,6,7,8,9,10,11,12],
+    "mean_season": ["spring","summer","autumn","winter"]
+  },
+  "vars": {
+    "SP":    {"name":"SP",    "long_name":"地面降水",       "units":"kg"},
+    "aveMv": {"name":"aveMv", "long_name":"水汽平均状态量", "units":"kg"},
+    "aveMh": {"name":"aveMh", "long_name":"水凝物平均状态量","units":"kg"},
+    "INv":   {"name":"INv",   "long_name":"水汽输入值",     "units":"kg"},
+    "OTv":   {"name":"OTv",   "long_name":"水汽输出值",     "units":"kg"},
+    "INh":   {"name":"INh",   "long_name":"水凝物输入值",   "units":"kg"},
+    "OTh":   {"name":"OTh",   "long_name":"水凝物输出值",   "units":"kg"},
+    "MC":    {"name":"MC",    "long_name":"云凝结",         "units":"kg"},
+    "GMh":   {"name":"GMh",   "long_name":"水凝物总量",     "units":"kg"},
+    "GMv":   {"name":"GMv",   "long_name":"水汽总量",       "units":"kg"},
+    "CWR":   {"name":"CWR",   "long_name":"云水资源量",     "units":"kg"},
+    "CEv":   {"name":"CEv",   "long_name":"水汽凝结效率",   "units":"%"},
+    "PEh":   {"name":"PEh",   "long_name":"水凝物降水效率", "units":"%"},
+    "RCv":   {"name":"RCv",   "long_name":"水汽更新期",     "units":"day"},
+    "RCh":   {"name":"RCh",   "long_name":"水凝物更新期",   "units":"hour"}
+  }
+}

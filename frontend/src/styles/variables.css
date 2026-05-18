@@ -1,0 +1,42 @@
+/* === 设计系统 CSS 变量 =====================================================
+   来源：docs/design/frontend.md → "设计系统"节
+   ======================================================================== */
+:root {
+  /* 背景层次（深→浅）*/
+  --bg-0: #07090c;
+  --bg-1: #0d1117;
+  --bg-2: #131a22;
+  --bg-3: #1a232e;
+
+  /* 分割线 */
+  --line-1: #1f2a37;
+  --line-2: #2a3645;
+  --line-3: #3b4a5e;
+
+  /* 前景色 */
+  --fg-0: #e8edf3;
+  --fg-1: #b6c2d2;
+  --fg-2: #7a8699;
+  --fg-3: #54606f;
+
+  /* 强调色 */
+  --accent:       #58e0ff;
+  --accent-dim:   #2e7d92;
+  --accent-faint: rgba(88, 224, 255, 0.07);
+
+  /* 语义色 */
+  --warn: #ffba49;
+  --good: #88e07a;
+
+  /* 字体 */
+  --font-ui:   'Inter', 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               "Cascadia Code", "Source Code Pro",
+               "PingFang SC", "Microsoft YaHei", monospace;
+
+  /* 布局尺寸（rem 基准 = 16px） */
+  --h-nav:    2.75rem;   /* 44px */
+  --h-sub:    2.75rem;   /* 44px */
+  --h-bottom: 5.375rem;  /* 86px */
+  --w-rail:   3.5rem;    /* 56px */
+}
