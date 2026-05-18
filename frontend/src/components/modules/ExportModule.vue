@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
 
@@ -103,6 +103,8 @@ async function download() {
     progress.value    = 0
   }
 }
+
+onUnmounted(() => { if (_timer) { clearInterval(_timer); _timer = null } })
 </script>
 
 <template>
