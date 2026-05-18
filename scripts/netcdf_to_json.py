@@ -117,16 +117,24 @@ def _compute_means(
     monthly_arrs: dict[str, np.ndarray],
     sorted_month_keys: list[tuple[int, int]],
     var_names: list[str],
+    units_map: dict[str, str],
 ) -> tuple[dict, dict, dict]:
     """
     计算三种均值，各返回 dict: var -> np.ndarray。
       mean_all:    shape (1, lat, lon)  — yearly 帧整体时间均值
       mean_month:  shape (12, lat, lon) — monthly 按月份分组均值（1–12月）
       mean_season: shape (4, lat, lon)  — monthly 按四季分组均值（春夏秋冬）
+
+    mean_season 对 kg 变量采用两步聚合（与后端 SQL 一致）：
+      第一步：每年季节内月份 SUM → 得到该年该季节总量
+      第二步：跨年 nanmean → 多年平均季节总量
+    非 kg 变量直接 nanmean（等价于两步 avg）。
     """
     mean_all: dict[str, np.ndarray] = {}
     mean_month: dict[str, np.ndarray] = {}
     mean_season: dict[str, np.ndarray] = {}
+
+    years = sorted({yr for yr, _ in sorted_month_keys})
 
     for var in var_names:
         mean_all[var] = np.nanmean(yearly_arrs[var], axis=0, keepdims=True)
@@ -137,11 +145,23 @@ def _compute_means(
             monthly_by_month.append(np.nanmean(monthly_arrs[var][indices], axis=0))
         mean_month[var] = np.stack(monthly_by_month)
 
+        is_kg = units_map.get(var) == "kg"
         seasonal = []
         for season in SEASON_ORDER:
             months_set = SEASON_MONTHS[season]
-            indices = [i for i, (_, mo) in enumerate(sorted_month_keys) if mo in months_set]
-            seasonal.append(np.nanmean(monthly_arrs[var][indices], axis=0))
+            if is_kg:
+                # 两步聚合：先按年 SUM 季节内月份，再跨年 nanmean
+                year_totals = []
+                for yr in years:
+                    idx = [i for i, (y, mo) in enumerate(sorted_month_keys)
+                           if y == yr and mo in months_set]
+                    if idx:
+                        year_totals.append(np.nansum(monthly_arrs[var][idx], axis=0))
+                seasonal.append(np.nanmean(np.stack(year_totals), axis=0))
+            else:
+                # 非 kg：直接 nanmean（等价于两步取 avg）
+                indices = [i for i, (_, mo) in enumerate(sorted_month_keys) if mo in months_set]
+                seasonal.append(np.nanmean(monthly_arrs[var][indices], axis=0))
         mean_season[var] = np.stack(seasonal)
 
     return mean_all, mean_month, mean_season
@@ -164,6 +184,8 @@ def main() -> None:
     sample = next(iter(yearly.values())) if yearly else next(iter(monthly.values()))
     with xr.open_dataset(sample) as ds:
         meta, var_names = _build_meta(ds, yearly.keys(), monthly.keys())
+
+    units_map = {var: meta["vars"][var]["units"] for var in var_names}
 
     for sub in ("year", "month", "mean_all", "mean_month", "mean_season"):
         (args.out_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -191,7 +213,7 @@ def main() -> None:
 
     print("\ncomputing means...")
     mean_all, mean_month, mean_season = _compute_means(
-        yearly_arrs, monthly_arrs, sorted_month_keys, var_names
+        yearly_arrs, monthly_arrs, sorted_month_keys, var_names, units_map
     )
     for var in var_names:
         _write(args.out_dir / "mean_all" / f"{var}.json", _to_json_frames(mean_all[var]))
