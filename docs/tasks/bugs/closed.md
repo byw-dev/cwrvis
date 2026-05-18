@@ -388,3 +388,17 @@
 **出现原因**：两者均在 window 上以冒泡阶段注册 keydown 监听；GridModule 先注册故先执行，`stopImmediatePropagation` 对已执行的处理器无效
 **修复方案**：HelpModal 改用捕获阶段（`addEventListener('keydown', handler, true)`）；捕获阶段先于冒泡阶段执行，`stopImmediatePropagation` 可阻止 GridModule 的冒泡阶段处理器运行
 **修复记录**：444326f — fix(frontend): BUG-30 改用捕获阶段注册 Escape 监听，确保先于 GridModule 处理
+
+---
+
+## BUG-28 · HelpModal 未做焦点管理，键盘用户可 Tab 到遮罩后的控件
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：打开帮助弹窗，使用键盘 Tab 键导航
+**期望行为**：焦点移入弹窗内，Tab 在弹窗内循环，关闭后焦点回到触发按钮
+**实际行为**：弹窗打开后焦点未移入，Tab 可离开遮罩到达背后的地图控件
+**相关文件**：`frontend/src/components/modals/HelpModal.vue`
+**出现原因**：弹窗仅标注了 `aria-modal`，未实现对应的焦点管理逻辑
+**修复方案**：新增 `modalRef` 绑定；`onMounted` 记录 `prevFocus` 并聚焦首个可聚焦元素（关闭按钮）；`onKeydown` 增加 Tab/Shift+Tab 拦截，在 `getFocusable()` 返回的元素列表首尾间循环；`onUnmounted` 调用 `prevFocus?.focus()` 还原焦点
+**修复记录**：c65c548 — fix(frontend): BUG-28 HelpModal 焦点管理——open 聚焦、Tab 陷阱、close 还原
