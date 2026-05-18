@@ -388,7 +388,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 后端 404 → 行内错误提示；meta 加载失败 → 提示占位
   - `← needs: B-07, F-17`
 
-- [ ] `TODO` **F-29** `[S]` ExportModule 伪进度条遮罩（Enhancement）
+- [x] `DONE` **F-29** `[S]` ExportModule 伪进度条遮罩（Enhancement）
   - 点击"下载报告"后，在模块区域内显示加载遮罩：
     - 文字："正在生成报告，请稍候..."
     - 伪进度条：JS `setInterval` 驱动，约 9s 内线性推进至 90%，随后停在 90% 等待后端响应
@@ -399,7 +399,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 帮助文本同步简化：`"ℹ 报告为 .docx 格式，由数据团队预生成。若所选组合暂无报告，将在此处提示..."` → `"ℹ 报告为 .docx 格式。"`
   - `← needs: B-08`
 
-- [ ] `TODO` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格（Enhancement）
+- [x] `DONE` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格（Enhancement）
   - TABS 末尾追加 `{ key: 'avg_yearly', label: '年平均', mode: 'avg_yearly' }`
   - `activeTab === 'avg_yearly'` 时：隐藏 ECharts 图表 + "追加变量"按钮 + 当前帧竖线；改为渲染 `<table>`：
     - **第一列**：变量英文 key（如 `SP`）；hover 时 tooltip 显示中文名 + 单位（来自 `frontend/src/config/vars.ts`）
@@ -409,7 +409,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 数据来源：`loadStats(regionId, 'avg_yearly')` → 后端 `mean_all` → 单行，直接读字段值
   - `← needs: F-16, B-05`
 
-- [ ] `TODO` **F-28** `[S]` RegionHistoryModal CSV 导出（Enhancement）
+- [x] `DONE` **F-28** `[S]` RegionHistoryModal CSV 导出（Enhancement）
   - 模态框标题栏右侧新增"⬇ 导出 CSV"按钮（与关闭按钮并列）
   - 点击时从 statsCache 取当前 Tab 已加载数据（无需额外请求），构建 CSV 字符串：
     - **第一列**（时间列）：
@@ -517,11 +517,11 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 | 模块 | 总计 | ✅ DONE | 🔄 IN_PROGRESS | 📋 TODO | 🚫 BLOCKED |
 |------|:----:|:-------:|:--------------:|:-------:|:----------:|
 | S 脚本 | 6 | 6 | 0 | 0 | 0 |
-| B 后端 | 7 | 6 | 0 | 1 | 0 |
-| F 前端 | 28 | 21 | 0 | 7 | 0 |
+| B 后端 | 7 | 7 | 0 | 0 | 0 |
+| F 前端 | 28 | 25 | 0 | 0 | 3 |
 | D 部署 | 3 | 3 | 0 | 0 | 0 |
-| **合计** | **44** | **36** | **0** | **8** | **0** |
+| **合计** | **44** | **41** | **0** | **0** | **3** |
 
-> F TODO 8 = F-21（聚合层备用）+ F-22 BLOCKED + F-23 BLOCKED + F-24 BLOCKED + F-27 + F-28 + F-29 + F-30
+> F BLOCKED 3 = F-22 / F-23 / F-24（格点等值线、高低点标注、数值标注；依赖技术方案决策）
 
-**预估剩余工时**（单人）：约 2.5 天（B-08 + F-27/F-28/F-29/F-30 + Tweaks；F-22~F-24 已挂起）
+**预估剩余工时**（单人）：F-22~F-24（等值线/标注）待技术决策后评估；其余用户反馈迭代已全部完成

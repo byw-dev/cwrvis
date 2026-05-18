@@ -15,5 +15,5 @@
 
 - [x] ~~**B-08 + F-29** 报告下载伪进度条 + 后端延迟~~ (`38176f5`)
 - [x] ~~**F-27** RegionHistoryModal 年平均 Tab + 静态表格~~ (`14e04ed`)
-- [ ] `TODO` **F-28** `[S]` RegionHistoryModal CSV 导出
+- [x] ~~**F-28** RegionHistoryModal CSV 导出~~ (`03c3e60`)
 - [x] ~~**F-30** 界面字号与尺寸缩放设置~~ (`a6befec`)
