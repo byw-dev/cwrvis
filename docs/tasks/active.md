@@ -19,4 +19,4 @@
 - [ ] `TODO` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格展示
 - [ ] `TODO` **F-28** `[S]` RegionHistoryModal CSV 导出
 - [ ] `TODO` **F-29** `[S]` ExportModule 伪进度条遮罩（含帮助文本简化 Tweak）
-- [ ] `TODO` **F-30** `[M]` 界面字号与尺寸缩放设置（正常/大/更大）
+- [x] ~~**F-30** 界面字号与尺寸缩放设置~~ (`a6befec`)
