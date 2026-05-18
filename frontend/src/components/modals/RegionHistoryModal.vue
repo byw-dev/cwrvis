@@ -30,9 +30,10 @@ const TABS: { key: TabKey; label: string; mode: AggMode }[] = [
   { key: 'avg_yearly',  label: '年平均', mode: 'avg_yearly'  },
 ]
 
-const activeTab    = ref<TabKey>('yearly')
-const isAvgYearly  = computed(() => activeTab.value === 'avg_yearly')
-const activeVars   = ref<VarName[]>([varStore.selVar])
+const activeTab        = ref<TabKey>('yearly')
+const isAvgYearly      = computed(() => activeTab.value === 'avg_yearly')
+const avgYearlyLoading = ref(false)
+const activeVars       = ref<VarName[]>([varStore.selVar])
 const varPickerOpen = ref(false)
 
 const chartEl  = ref<HTMLDivElement>()
@@ -112,9 +113,15 @@ async function loadActiveTab() {
   const tab  = TABS.find(t => t.key === activeTab.value)!
   const mode = tab.mode
   if (isAvgYearly.value) {
-    await regionStore.loadStats(regionStore.selRegionId, 'avg_yearly')
+    avgYearlyLoading.value = true
+    try {
+      await regionStore.loadStats(regionStore.selRegionId, 'avg_yearly')
+    } finally {
+      avgYearlyLoading.value = false
+    }
     return
   }
+  avgYearlyLoading.value = false
   for (const vn of activeVars.value) {
     await ensureData(vn, mode)
   }
@@ -447,7 +454,8 @@ function exportCsv() {
 
       <!-- 静态表格（年平均 Tab） -->
       <div v-else class="avg-table-wrap">
-        <table class="avg-table">
+        <div v-if="avgYearlyLoading" class="avg-loading">加载中…</div>
+        <table v-else class="avg-table">
           <thead>
             <tr class="avg-head">
               <th class="avg-th">变量</th>
@@ -563,6 +571,15 @@ function exportCsv() {
   padding: 1.5em 2em;
   overflow-y: auto;
   max-height: 460px;
+}
+
+.avg-loading {
+  padding: 2em 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
 }
 
 .avg-table {
