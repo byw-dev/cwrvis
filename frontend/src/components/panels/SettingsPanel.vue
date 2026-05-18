@@ -43,6 +43,20 @@ function fmtTime(iso: string): string {
       </div>
 
       <div class="settings-body">
+        <!-- Spatial distribution -->
+        <div class="settings-section">
+          <div class="section-label">空间分布</div>
+          <label class="radio-item" :class="{ active: settings.showXizangBoundary }">
+            <input
+              type="checkbox"
+              :checked="settings.showXizangBoundary"
+              @change="settings.showXizangBoundary = ($event.target as HTMLInputElement).checked"
+            />
+            显示行政边界
+          </label>
+          <div class="section-hint">西藏全区外轮廓 + 7 个地市分界线</div>
+        </div>
+
         <!-- Basemap -->
         <div class="settings-section">
           <div class="section-label">底图</div>

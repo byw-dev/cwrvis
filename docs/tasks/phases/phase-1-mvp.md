@@ -487,7 +487,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - 因布局尺寸（`--h-nav` 等）已是 rem，组件高度自动跟随缩放；下拉菜单固定 `px` 宽度（`min-width: 180px` 等）需同步改为 `em`
   - `← needs: F-18（SettingsPanel 已有）`
 
-- [ ] `TODO` **F-31** `[M]` 变量显示名称重命名——临时展示层映射（Enhancement，见 DEC-018）
+- [x] `DONE` **F-31** `[M]` 变量显示名称重命名——临时展示层映射（Enhancement，见 DEC-018）
   - **背景**：甲方要求对齐新命名规范，但上游数据文件暂时无法同步变更，采用临时展示层映射方案
   - **核心改动**：`VarMeta` 新增 `display_name` 字段；前端所有用户可见处改用 `display_name`；数据访问层不变
   - **涉及文件**（10 处）：
@@ -502,6 +502,17 @@ D-02 / D-03 可在 D-01 完成后并行进行。
     - `frontend/src/components/modals/HistoryModal.vue`：legend formatter、tooltip
   - **注意**：chart series name 保留旧 key（用于 VARS 元数据反向查找），仅在 legend formatter / tooltip 渲染时替换为 `display_name`
   - **后续**：全链路迁移完成后，删除 `display_name` 字段，见 backlog F-32/F-33
+
+- [ ] `TODO` **F-34** `[S]` 空间分布模块固定显示西藏自治区边界线（Enhancement）
+  - **背景**：空间分布地图目前无任何行政边界参考，加上全区外轮廓 + 7 个地市内部分界线，方便识别格点数据的空间位置
+  - **数据来源**：复用 `/shapes/` 静态端点（`xizang.geojson` + `lasa/rikaze/shannan/linzhi/changdu/naqu/ali.geojson`），GCJ-02 → WGS-84 坐标偏移逻辑与 `useRegionLayer` 一致
+  - **实现方案**：新建 `useXizangBoundary.ts` composable（模块级单例，init/show/hide 与 `useRegionLayer` 同模式）；`GridModule.vue` 调用一行即可
+  - **4 个 MapLibre 图层**（按渲染顺序从下到上）：
+    - `xizang-prefecture-halo`：地市分界光晕 `rgba(0,0,0,0.4)` 1.5px
+    - `xizang-prefecture-line`：地市分界白线 `rgba(255,255,255,0.5)` 0.75px
+    - `xizang-outer-halo`：外轮廓光晕 `rgba(0,0,0,0.5)` 2.5px
+    - `xizang-outer-line`：外轮廓白线 `rgba(255,255,255,0.85)` 1.5px
+  - **验收**：打开"空间分布"模块，地图上始终可见西藏全区外轮廓（白色+黑色光晕）及 7 条地市内部分界线；切换到其他模块后边界线消失
 
 ---
 

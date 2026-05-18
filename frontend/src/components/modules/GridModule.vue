@@ -13,10 +13,12 @@ import { useMetaStore } from '@/stores/meta'
 import { VARS } from '@/config/vars'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
+import { useXizangBoundary } from '@/composables/useXizangBoundary'
 // fetchFrames 已从 useGridLayer return 中移除，历史数据由 HistoryModal 懒加载
 
 const { map }                         = useMap()
 const { getValueAt, renderTick }      = useGridLayer()
+useXizangBoundary()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
 const metaStore = useMetaStore()
