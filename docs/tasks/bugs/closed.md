@@ -402,3 +402,17 @@
 **出现原因**：弹窗仅标注了 `aria-modal`，未实现对应的焦点管理逻辑
 **修复方案**：新增 `modalRef` 绑定；`onMounted` 记录 `prevFocus` 并聚焦首个可聚焦元素（关闭按钮）；`onKeydown` 增加 Tab/Shift+Tab 拦截，在 `getFocusable()` 返回的元素列表首尾间循环；`onUnmounted` 调用 `prevFocus?.focus()` 还原焦点
 **修复记录**：c65c548 — fix(frontend): BUG-28 HelpModal 焦点管理——open 聚焦、Tab 陷阱、close 还原
+
+---
+
+## BUG-31 · 年平均表格加载中状态与"无数据"状态无法区分
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：打开历史弹窗立即切换到"年平均" Tab（数据尚在请求中）
+**期望行为**：展示"加载中…"，与数据加载完成后值为 null 的情况区分
+**实际行为**：statsCache 未命中时以 null 值渲染所有行（显示 `—`），与无数据视觉上无法区分
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：loadActiveTab 仅控制数据请求，未向模板暴露"请求进行中"状态，模板无法区分"未加载"和"已加载但为空"
+**修复方案**：新增 `avgYearlyLoading` ref；loadActiveTab 在 avg_yearly 分支 await 前置 true、finally 保证清零；模板用 `v-if="avgYearlyLoading"` 显示"加载中…"，否则渲染表格
+**修复记录**：a3ea555 — fix(frontend): BUG-31 年平均表格区分加载中与无数据状态
