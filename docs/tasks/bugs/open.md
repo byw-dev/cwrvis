@@ -30,6 +30,30 @@
 
 ---
 
+## BUG-24 · `useXizangBoundary` initLayers 在组件卸载后仍可执行
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：
+1. 进入"空间分布"模块，网络较慢时立即切换到"区域评估"模块
+2. GeoJSON 异步加载完成后，边界图层仍被加入地图
+**期望行为**：组件卸载后 initLayers 的后续操作不执行，不向地图添加任何图层
+**实际行为**：`initLayers` 为异步函数，`onUnmounted` 调用 `hideLayers` 时 `layersAdded` 仍为 false，无法隐藏；GeoJSON 加载完成后图层照常添加，在其他模块下可见边界线
+**相关文件**：`frontend/src/composables/useXizangBoundary.ts`
+
+---
+
+## BUG-25 · mean_season 两步聚合中 `nansum` 对全 NaN 格点返回 0
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：数据集中某格点某季节所有月份均为 NaN（缺测），查看该格点季平均值
+**期望行为**：全 NaN 输入的季节聚合结果应保持 NaN（与后端 SQL NULL 行为一致）
+**实际行为**：`np.nansum` 对全 NaN 切片返回 0.0，导致无数据格点被赋值 0，影响跨年均值计算
+**相关文件**：`scripts/netcdf_to_json.py`（`_compute_means` 函数，BUG-21 修复引入）；修复后需重新运行 `make data-grid`
+
+---
+
 ## BUG-18 · `bilinearInterp` 坐标映射与 Canvas 渲染不一致
 
 **发现时间**：2026-05-16
