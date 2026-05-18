@@ -274,3 +274,19 @@
 **出现原因**：`sendToWorker` 对同一 `frameKey` 可能被 `renderCurrent()` 和 `preload()` 各投递一次（preload 仅检查 `imageCache` 是否存在，不检查是否正在渲染）。第一次 Worker 响应正常写入 `imageCache` 并删除 `pendingRanges` 条目；第二次响应时条目已被删，回退到兜底 `{vmin:0, vmax:1}`，覆盖了正确缓存。
 **修复方案**：新增模块级 `pendingKeys: Set<string>`，`sendToWorker` 投递前若 key 已在集合中则直接 return；投递后加入集合，Worker 响应后移除。`imageCache.clear()` 时同步清空 `pendingKeys` 和 `pendingRanges`。
 **修复记录**：bf660cb — fix(frontend): BUG-20 pendingKeys Set 防止重复渲染污染 imageCache
+
+---
+
+## BUG-21 · 格点季平均（mean_season）对 kg 变量计算逻辑错误，结果偏低约 3 倍
+
+**发现时间**：2026-05-18
+**严重程度**：Major
+**重现步骤**：在"空间分布"模块切换至"季平均"聚合模式，查看任意 kg 单位变量（如 SP、CWR），与区域评估模块季平均数值对比
+**期望行为**：格点季平均 = 先对每年季节内月份 SUM，再跨年 nanmean（与后端 SQL 两步聚合一致）
+**实际行为**：直接对所有年同季月份取 nanmean，等价于月均值，kg 变量结果偏低约 3 倍
+**受影响变量**：kg 单位变量（11 个）：SP、CWR、GMv、GMh、aveMv、aveMh、INv、OTv、INh、OTh、MC；`%`/`day`/`hour` 变量不受影响
+**相关文件**：`scripts/netcdf_to_json.py`
+**出现原因**：`_compute_means` 的 `mean_season` 分支对所有变量统一用 `np.nanmean`，未区分累计量（kg，应先季内 SUM 再跨年 AVG）与状态量（可直接 AVG），与后端 SQL 两步聚合逻辑不一致
+**修复方案**：新增 `units_map` 参数，kg 变量按年对季节内月份 `nansum` 后再跨年 `nanmean`；非 kg 变量保持直接 `nanmean`（数学等价）；units 从 netcdf 属性读取，不硬编码。修复后需重新运行 `make data-grid` 重生成 `static/grid/mean_season/` 数据
+**技术决策**：units 来源选择 netcdf 文件属性而非硬编码列表，保持脚本与数据源自洽，避免与 `backend/config.py` 的 KG_VARS 产生两处维护点
+**修复记录**：9512422 — fix(scripts): BUG-21 格点季平均 kg 变量改为两步聚合
