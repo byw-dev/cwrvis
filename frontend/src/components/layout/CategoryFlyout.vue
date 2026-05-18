@@ -104,7 +104,7 @@ function select(name: VarName) {
 
 .flyout-title {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.06em;
   color: var(--fg-1);
   text-transform: uppercase;
@@ -113,7 +113,7 @@ function select(name: VarName) {
 
 .flyout-count {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-3);
 }
 
@@ -121,7 +121,7 @@ function select(name: VarName) {
   background: none;
   border: none;
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: 0.6875rem;
   padding: 2px 4px;
   cursor: pointer;
   line-height: 1;
@@ -141,7 +141,7 @@ function select(name: VarName) {
   border: 1px solid var(--line-2);
   color: var(--fg-0);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 0.75rem;
   padding: 5px 8px;
   outline: none;
 }
@@ -176,13 +176,13 @@ function select(name: VarName) {
 
 .item-code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--accent);
 }
 .flyout-item.active .item-code { color: var(--accent); }
 
 .item-name {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--fg-1);
   white-space: nowrap;
   overflow: hidden;
@@ -191,14 +191,14 @@ function select(name: VarName) {
 
 .item-unit {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-3);
   white-space: nowrap;
 }
 
 .flyout-empty {
   padding: 16px 12px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--fg-3);
   text-align: center;
 }

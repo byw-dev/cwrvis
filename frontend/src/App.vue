@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { useMetaStore } from '@/stores/meta'
+import { useSettingsStore } from '@/stores/settings'
 import ProductNav from '@/components/layout/ProductNav.vue'
 import BottomBar from '@/components/layout/BottomBar.vue'
 import MapView from '@/components/map/MapView.vue'
@@ -13,8 +14,13 @@ import SettingsPanel from '@/components/panels/SettingsPanel.vue'
 import type { ModuleId } from '@/types'
 
 const metaStore    = useMetaStore()
+const settingsStore = useSettingsStore()
 const activeModule = ref<ModuleId>('grid')
 const settingsOpen = ref(false)
+
+watchEffect(() => {
+  document.documentElement.style.fontSize = settingsStore.fontSize
+})
 
 // BottomBar is only relevant for data-viewing modules
 const showBottomBar = computed(() =>

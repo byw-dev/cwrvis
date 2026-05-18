@@ -109,7 +109,7 @@ const frameLabel = computed(() => {
   border: 1px solid var(--line-3);
   padding: 4px 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--fg-1);
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
