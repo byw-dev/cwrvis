@@ -686,8 +686,7 @@ GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=202
 | 年平均 | `mean_all` | 1 | statsCache 或后端请求 | **静态表格**（见下） |
 
 **年平均 Tab — 静态表格**（F-27）：
-- 单行数据无法绘制折线，改为两列表格：第一列变量 key，第二列数值
-- 变量列 hover → tooltip 显示中文名 + 单位（来自 `config/vars.ts`）
+- 单行数据无法绘制折线，改为三列表格：第一列 display_name、第二列中文名（long_name）、第三列数值
 - kg→mm 开关对 KG_VARS 生效；`null` → `—`
 - 行数 = 15，顺序与 vars.ts 一致
 - 隐藏"追加变量"按钮和当前帧竖线
@@ -696,8 +695,8 @@ GET /api/v1/stats?region_id={id}&granularity={mode}&year_start=2000&year_end=202
 - 标题栏右侧"⬇ 导出 CSV"按钮（与关闭按钮并列）
 - 导出当前 Tab 全部数据 × 全部15个变量；无需额外请求（复用 statsCache）
 - 时间列格式：逐年 `YYYY`、逐月 `YYYY-MM`、年平均 `2000-2025`、月平均 `1~12`、季平均 `spring/summer/autumn/winter`
-- 列头全英文 key，值应用 kg→mm 换算（若开关开启）
-- 文件名：`{regionName}-{modeLabel}-云水资源数据.csv`（如"阿里地区-逐月-云水资源数据.csv"）
+- 列头使用 display_name（F-31 映射后），值应用 kg→mm 换算（若开关开启）
+- 文件名：`{regionName}-{modeLabel}-云水资源数据-{unitSuffix}.csv`（unitSuffix：`kg` 或 `mm`）
 
 ---
 

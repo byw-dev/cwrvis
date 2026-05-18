@@ -402,8 +402,9 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 - [x] `DONE` **F-27** `[M]` RegionHistoryModal 年平均 Tab + 静态表格（Enhancement）
   - TABS 末尾追加 `{ key: 'avg_yearly', label: '年平均', mode: 'avg_yearly' }`
   - `activeTab === 'avg_yearly'` 时：隐藏 ECharts 图表 + "追加变量"按钮 + 当前帧竖线；改为渲染 `<table>`：
-    - **第一列**：变量英文 key（如 `SP`）；hover 时 tooltip 显示中文名 + 单位（来自 `frontend/src/config/vars.ts`）
-    - **第二列**：数值，格式与图表 tooltip 一致；`null` → `—`
+    - **第一列**：变量 display_name（如 `MMv`）
+    - **第二列**：变量中文名（long_name）
+    - **第三列**：数值，格式与图表 tooltip 一致；`null` → `—`
     - kg→mm 开关对 KG_VARS 生效（`value / area_m2`）；其余变量不换算
     - 行数 = 15，顺序与 vars.ts 定义顺序一致
   - 数据来源：`loadStats(regionId, 'avg_yearly')` → 后端 `mean_all` → 单行，直接读字段值
@@ -420,12 +421,13 @@ D-02 / D-03 可在 D-01 完成后并行进行。
       | 年平均 | `period` | `"2000-2025"` |
       | 月平均 | `month` | `1`…`12` |
       | 季平均 | `season` | `spring/summer/autumn/winter` |
-    - **其余15列**：英文 key（`SP, CWR, aveMv, ...`），顺序与 vars.ts 一致
+    - **其余15列**：display_name（`MMv, MMh, Qvi, ...`，F-31 映射后），顺序与 vars.ts 一致
     - 值：kg→mm 开关对 KG_VARS 生效；`null` → 空字符串
-    - 编码：UTF-8（内容全 ASCII，无乱码风险）
-  - 文件名：`{regionName}-{modeLabel}-云水资源数据.csv`
+    - 编码：UTF-8
+  - 文件名：`{regionName}-{modeLabel}-云水资源数据-{unitSuffix}.csv`
     - `regionName`：取 `metaStore.regions` 中对应 `name` 字段（中文，如"阿里地区"）
     - `modeLabel`：当前 Tab label（逐月/逐年/年平均/月平均/季平均）
+    - `unitSuffix`：`kg` 或 `mm`（取决于 kg→mm 开关）
   - `← needs: F-16, B-05`
 
 - [x] `DONE` **F-18** `[S]` SettingsPanel（用户设置）
@@ -483,7 +485,7 @@ D-02 / D-03 可在 D-01 完成后并行进行。
     - 正常（`font-size: 100%`，浏览器默认 16px）
     - 大（`font-size: 112.5%`，约 18px）
     - 更大（`font-size: 125%`，约 20px）
-  - 选中后动态设置 `document.documentElement.style.fontSize`，持久化至 localStorage（key：`cwrvis:font-size`）
+  - 选中后动态设置 `document.documentElement.style.fontSize`，持久化至 localStorage（key：`cwrvis:font_size`）
   - 因布局尺寸（`--h-nav` 等）已是 rem，组件高度自动跟随缩放；下拉菜单固定 `px` 宽度（`min-width: 180px` 等）需同步改为 `em`
   - `← needs: F-18（SettingsPanel 已有）`
 
