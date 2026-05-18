@@ -45,9 +45,12 @@ function initChart(el: HTMLDivElement) {
   chart.value = c
   c.on('click', (params: any) => {
     const mode = TABS.find(t => t.key === activeTab.value)!.mode
-    timeStore.goToIndex(params.dataIndex)
     const items = buildItems(mode)
-    if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
+    if (items[params.dataIndex]) {
+      timeStore.setMode(mode)
+      timeStore.goToIndex(params.dataIndex)
+      emit('close')
+    }
   })
   c.on('mouseover', (params: any) => {
     if (outTimer) { clearTimeout(outTimer); outTimer = null }
@@ -84,6 +87,10 @@ const area_m2 = computed<number | null>(() =>
 const anyKgVar = computed(() =>
   activeVars.value.some(vn => VARS[vn].units === 'kg')
 )
+const csvDataReady = computed(() => {
+  const tab = TABS.find(t => t.key === activeTab.value)
+  return tab ? regionStore.getCached(regionStore.selRegionId, tab.mode) !== null : false
+})
 // true 仅当：用户已开启开关 + 当前有 kg var + 面积数据可用
 const convKg = computed(() =>
   isKgToMm.value && anyKgVar.value && area_m2.value !== null
@@ -387,13 +394,13 @@ function exportCsv() {
         <div class="modal-head-left">
           <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
           <button
-            v-if="anyKgVar && area_m2 !== null"
+            v-if="(isAvgYearly || anyKgVar) && area_m2 !== null"
             class="unit-toggle-btn"
             @click="toggleUnit"
           >{{ isKgToMm ? 'mm→kg' : 'kg→mm' }}</button>
         </div>
         <div class="modal-head-right">
-          <button class="csv-btn" @click="exportCsv">⬇ 导出 CSV</button>
+          <button class="csv-btn" :disabled="!csvDataReady" @click="exportCsv">⬇ 导出 CSV</button>
           <button class="modal-close" @click="emit('close')">✕</button>
         </div>
       </div>
@@ -509,6 +516,7 @@ function exportCsv() {
   letter-spacing: 0.04em;
 }
 .csv-btn:hover { background: var(--accent-faint); }
+.csv-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .modal-tabs {
   display: flex; align-items: center;
