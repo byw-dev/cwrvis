@@ -432,3 +432,19 @@
 **出现原因**：安装逻辑对 `conf/` 无特殊处理，`rm -rf` 将整个版本目录连同用户数据一起删除；`config.env` 虽由后续逻辑重建，但其他用户文件无法还原
 **修复方案**：在 `rm -rf $DEST` 之前，将 `$DEST/conf/` 整体暂存至临时目录；新包复制完成后，将所有非 `*.example` 文件回写至 `$DEST/conf/`；`*.example` 保持新包版本不回写
 **修复记录**：677cc29 — fix(deploy): BUG-32 install.sh 升级时保护 conf/ 下用户文件
+
+---
+
+## BUG-33 · `FORWARDED_ALLOW_IPS` 写入 config.env 导致 pydantic-settings 启动报错
+
+**发现时间**：2026-05-19
+**严重程度**：Critical
+**重现步骤**：
+1. 在 `conf/config.env` 中设置 `FORWARDED_ALLOW_IPS=192.168.200.100/22`
+2. 启动服务，journalctl 报 `ValidationError: Extra inputs are not permitted`
+**期望行为**：服务正常启动，uvicorn 读取 `FORWARDED_ALLOW_IPS` 并应用代理头解析
+**实际行为**：pydantic-settings 将 `conf/config.env` 中所有键读入 `Settings` 模型，`FORWARDED_ALLOW_IPS` 不在模型字段中，触发 `extra_forbidden` 校验错误，进程退出
+**相关文件**：`backend/config.py`
+**出现原因**：新版 pydantic-settings（远端 Python 3.14 环境）默认 `extra='forbid'`；`FORWARDED_ALLOW_IPS` 是 shell/uvicorn 层变量，不需要进入 Python `Settings`，但 `model_config` 未声明容忍策略
+**修复方案**：`model_config` 加 `"extra": "ignore"`，pydantic-settings 忽略所有未声明字段，不影响已有字段的读取与校验
+**修复记录**：a3e010e — fix(backend): Settings model_config 加 extra=ignore 兼容未知环境变量
