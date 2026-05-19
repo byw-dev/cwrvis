@@ -237,3 +237,72 @@
 | `scripts/netcdf_to_sqlite.py` / `csv_to_sqlite.py` | 区域 ID 从 shape 文件名推断，无层级概念 |
 
 **触发条件**：一旦需要支持多省、县级区域或动态区域配置，须先设计区域层级数据模型（建议参考 `region_id` + `parent_id` + `level` 的树形结构），再系统性替换上述所有位置。见 `docs/tasks/backlog.md`。
+
+---
+
+## 数据要素名称
+
+### DEC-018：变量显示名称重命名——临时展示层映射
+
+**状态**：Active（临时方案，待全链路迁移后废止，见"全链路迁移规划"）
+
+**决策**：在 `VarMeta` 新增 `display_name` 字段，前端 UI 所有用户可见处改用 `display_name`（新缩写）和更新后的 `long_name`（新中文名）；数据访问层（API 请求、SQLite 查询、JSON 取值）继续使用旧变量 key，不做任何改动。
+
+**背景**：甲方要求将系统展示的变量名称对齐 2025 年最新命名规范（见 `云水资源要素名称对应关系_20260517.xlsx`）。然而当前 NC 格点文件、CSV 区域统计结果、SQLite 数据库均使用旧命名，短期内无法同步变更；验收时间节点在即，必须快速完成前端展示的名称对齐。
+
+**原因**：
+- 全链路改动涉及离线脚本重跑、数据库重建、后端接口调整，工期估算 3-5 天，超出当前窗口
+- 仅改展示层风险极低：数据访问路径、API 参数、缓存 key 均不受影响
+- `display_name` 字段明确标注为"展示用临时字段"，后续全链路迁移时统一删除
+
+**代价**：`display_name` 与旧数据 key 的映射硬编码于 `frontend/src/config/vars.ts`，属已知技术债；系统中同时存在两套名称（旧 key 用于数据，新缩写用于展示），增加认知负担。
+
+---
+
+#### 变量名称对照表（完整）
+
+> 数据 key（第1列）为实际使用的字段名，不可变动。`display_name`（第2列）与 `long_name`（第3列）仅用于前端展示。
+
+| 数据 key（不变） | display_name（新缩写） | long_name（新中文名） | 单位 | 分组（新） |
+|----------------|----------------------|---------------------|------|-----------|
+| SP | Ps | 地面降水量 | kg | 转化 |
+| CWR | CWR | 云水资源量 | kg | 总量 |
+| aveMv | MMv | 水汽平均状态量 | kg | 状态量 |
+| aveMh | MMh | 水凝物平均状态量 | kg | 状态量 |
+| GMv | GMv | 水汽总量 | kg | 总量 |
+| GMh | GMh | 大气水凝物总量 | kg | 总量 |
+| INv | Qvi | 水汽输入量 | kg | 平流量 |
+| OTv | Qvo | 水汽输出量 | kg | 平流量 |
+| INh | Qhi | 水凝物输入量 | kg | 平流量 |
+| OTh | Qho | 水凝物输出量 | kg | 平流量 |
+| MC | Cvh | 云凝结量 | kg | 转化 |
+| CEv | CEv | 水汽凝结效率 | % | 转化 |
+| PEh | PEh | 水凝物降水效率 | % | 转化 |
+| RCv | RTv | 水汽更新期 | day | 更新期 |
+| RCh | RTh | 水凝物更新期 | hour | 更新期 |
+
+#### 变量分组变更对照
+
+| 新分组 | 新成员（display_name） | 数据 key | 原分组 |
+|--------|----------------------|---------|--------|
+| 状态量 | MMv, MMh | aveMv, aveMh | 原状态量（去掉 GMv/GMh） |
+| 平流量 | Qvi, Qvo, Qhi, Qho | INv, OTv, INh, OTh | 原通量（改名） |
+| 转化 | Cvh, Ps, CEv, PEh | MC, SP, CEv, PEh | 原转化 + SP 并入 |
+| 总量 | GMv, GMh, CWR | GMv, GMh, CWR | 原状态量的 GMv/GMh + 原资源量的 CWR |
+| 更新期 | RTv, RTh | RCv, RCh | 不变 |
+
+LeftRail 侧边栏图标语义映射：旧"资源量"图标 → 新"总量"，旧"通量"图标 → 新"平流量"，其余三组图标不变。
+
+---
+
+#### 全链路迁移规划（延期，待数据同步后执行）
+
+全链路迁移需按以下顺序执行，前提是甲方提供按新命名生成的源数据：
+
+1. **数据层**：确认 NC 文件中新变量 key；`scripts/netcdf_to_json.py`、`netcdf_to_sqlite.py`、`csv_to_sqlite.py` 更新列名映射，重新生成 `static/grid/` 所有 JSON 和 `db/stats.db`
+2. **后端层**：更新 `backend/config.py` 的 `KG_VARS`，更新 `routers/stats.py` 的列名引用
+3. **前端类型层**：更新 `frontend/src/types/index.ts` 的 `VarName` 联合类型为新缩写
+4. **前端展示层**：删除 `VarMeta.display_name` 字段，将所有用到 `display_name` 的地方改回直接使用 `name`，删除此临时方案留下的映射逻辑
+5. **验证**：全量回归测试，确认数据正确展示
+
+> 相关 backlog 条目：见 `docs/tasks/backlog.md`（F-32、F-33）。

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
 
@@ -51,22 +51,42 @@ function onRegionChange(id: string) {
   selYear.value     = ''
 }
 
-// ── 下载 ─────────────────────────────────────────────────────────────────────
+// ── 下载 + 伪进度条 ──────────────────────────────────────────────────────────
 
 const downloading = ref(false)
 const dlError     = ref<string | null>(null)
+const progress    = ref(0)
+let   _timer: ReturnType<typeof setInterval> | null = null
 
 const canDownload = computed(() => !!selRegionId.value && !!selYear.value && !downloading.value)
+
+function _startProgress() {
+  progress.value = 0
+  const increment = 90 / (9000 / 100)   // 90% in 9s, tick every 100ms
+  _timer = setInterval(() => {
+    if (progress.value < 90) progress.value = Math.min(90, progress.value + increment)
+  }, 100)
+}
+
+function _stopProgress() {
+  if (_timer) { clearInterval(_timer); _timer = null }
+}
 
 async function download() {
   if (!canDownload.value) return
   dlError.value     = null
   downloading.value = true
+  _startProgress()
   try {
     const url = `${API_BASE}/report/download?region_id=${selRegionId.value}&year=${selYear.value}`
     const res = await fetch(url)
-    if (res.status === 404) { dlError.value = '该组合暂无报告文件'; return }
-    if (!res.ok)            { dlError.value = `下载失败（HTTP ${res.status}）`; return }
+    if (!res.ok) {
+      dlError.value = res.status === 404 ? '该组合暂无报告文件' : `下载失败（HTTP ${res.status}）`
+      return
+    }
+    _stopProgress()
+    progress.value = 100
+    await new Promise(r => setTimeout(r, 300))
     const blob    = await res.blob()
     const cd      = res.headers.get('Content-Disposition') ?? ''
     const fnMatch = cd.match(/filename="?([^";]+)"?/)
@@ -78,15 +98,19 @@ async function download() {
   } catch {
     dlError.value = '网络错误，请重试'
   } finally {
+    _stopProgress()
     downloading.value = false
+    progress.value    = 0
   }
 }
+
+onUnmounted(() => { if (_timer) { clearInterval(_timer); _timer = null } })
 </script>
 
 <template>
   <div class="export-wrap">
     <div class="export-card">
-      <div class="export-title">数据导出</div>
+      <div class="export-title">报告制作</div>
 
       <div v-if="metaLoading" class="meta-state">加载报告目录…</div>
       <div v-else-if="metaError" class="meta-state error">{{ metaError }}</div>
@@ -119,15 +143,21 @@ async function download() {
         </div>
 
         <button class="download-btn" :disabled="!canDownload" @click="download">
-          {{ downloading ? '下载中…' : '⬇ 下载报告' }}
+          ⬇ 下载报告
         </button>
 
         <div v-if="dlError" class="export-error">{{ dlError }}</div>
       </template>
 
-      <div class="export-note">
-        ℹ 报告为 .docx 格式，由数据团队预生成。<br>
-        若所选组合暂无报告，将在此处提示"文件不存在"。
+      <div class="export-note">ℹ 报告为 .docx 格式。</div>
+
+      <!-- 伪进度条遮罩 -->
+      <div v-if="downloading" class="dl-overlay">
+        <div class="dl-msg">正在生成报告，请稍候...</div>
+        <div class="dl-track">
+          <div class="dl-fill" :style="{ width: progress + '%' }" />
+        </div>
+        <div class="dl-pct">{{ Math.round(progress) }}%</div>
       </div>
     </div>
   </div>
@@ -146,6 +176,7 @@ async function download() {
 }
 
 .export-card {
+  position: relative;
   background: var(--bg-1);
   border: 1px solid var(--line-2);
   padding: 2.5em 3em;
@@ -221,5 +252,44 @@ async function download() {
   line-height: 1.6;
   border-top: 1px solid var(--line-1);
   padding-top: 0.75em;
+}
+
+.dl-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1em;
+  z-index: 10;
+}
+
+.dl-msg {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+}
+
+.dl-track {
+  width: 75%;
+  height: 2px;
+  background: var(--line-2);
+  position: relative;
+}
+
+.dl-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.dl-pct {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--fg-3);
 }
 </style>

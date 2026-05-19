@@ -2,6 +2,14 @@ import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { BasemapId, ColormapName, AggMode, VarName } from '@/types'
 
+export const FONT_SIZE_OPTIONS = [
+  { value: '100%', label: '正常' },
+  { value: '125%', label: '大'   },
+  { value: '150%', label: '更大' },
+] as const
+
+export type FontSizeValue = typeof FONT_SIZE_OPTIONS[number]['value']
+
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
 const LS_PREFIX = 'cwrvis:'
@@ -29,8 +37,14 @@ export const useSettingsStore = defineStore('settings', () => {
   const basemap = ref<BasemapId>(
     readLS<BasemapId>('basemap', 'osm')
   )
+  const showXizangBoundary = ref<boolean>(
+    readLS<boolean>('xizang_boundary', true)
+  )
   const scaleMode = ref<'auto' | 'preset'>(
     readLS<'auto' | 'preset'>('scale_mode', 'auto')
+  )
+  const fontSize = ref<FontSizeValue>(
+    readLS<FontSizeValue>('font_size', '100%')
   )
   // Grouped: { CWR: 'turbo', SP: 'viridis', ... }
   const colormaps = ref<Partial<Record<VarName, ColormapName>>>(
@@ -42,10 +56,12 @@ export const useSettingsStore = defineStore('settings', () => {
   )
 
   // Auto-persist on change
-  watch(basemap,    v => writeLS('basemap',    v))
-  watch(scaleMode,  v => writeLS('scale_mode', v))
+  watch(basemap,              v => writeLS('basemap',         v))
+  watch(showXizangBoundary,  v => writeLS('xizang_boundary', v))
+  watch(scaleMode,           v => writeLS('scale_mode',      v))
+  watch(fontSize,   v => writeLS('font_size', v))
   watch(colormaps,  v => writeLS('colormaps',  v), { deep: true })
-  watch(speeds,         v => writeLS('speeds',      v), { deep: true })
+  watch(speeds,     v => writeLS('speeds',     v), { deep: true })
 
   function getColormap(varName: VarName): ColormapName {
     return colormaps.value[varName] ?? 'turbo'
@@ -72,7 +88,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     basemap,
+    showXizangBoundary,
     scaleMode,
+    fontSize,
     colormaps,
     speeds,
     getColormap,

@@ -274,3 +274,145 @@
 **出现原因**：`sendToWorker` 对同一 `frameKey` 可能被 `renderCurrent()` 和 `preload()` 各投递一次（preload 仅检查 `imageCache` 是否存在，不检查是否正在渲染）。第一次 Worker 响应正常写入 `imageCache` 并删除 `pendingRanges` 条目；第二次响应时条目已被删，回退到兜底 `{vmin:0, vmax:1}`，覆盖了正确缓存。
 **修复方案**：新增模块级 `pendingKeys: Set<string>`，`sendToWorker` 投递前若 key 已在集合中则直接 return；投递后加入集合，Worker 响应后移除。`imageCache.clear()` 时同步清空 `pendingKeys` 和 `pendingRanges`。
 **修复记录**：bf660cb — fix(frontend): BUG-20 pendingKeys Set 防止重复渲染污染 imageCache
+
+---
+
+## BUG-21 · 格点季平均（mean_season）对 kg 变量计算逻辑错误，结果偏低约 3 倍
+
+**发现时间**：2026-05-18
+**严重程度**：Major
+**重现步骤**：在"空间分布"模块切换至"季平均"聚合模式，查看任意 kg 单位变量（如 SP、CWR），与区域评估模块季平均数值对比
+**期望行为**：格点季平均 = 先对每年季节内月份 SUM，再跨年 nanmean（与后端 SQL 两步聚合一致）
+**实际行为**：直接对所有年同季月份取 nanmean，等价于月均值，kg 变量结果偏低约 3 倍
+**受影响变量**：kg 单位变量（11 个）：SP、CWR、GMv、GMh、aveMv、aveMh、INv、OTv、INh、OTh、MC；`%`/`day`/`hour` 变量不受影响
+**相关文件**：`scripts/netcdf_to_json.py`
+**出现原因**：`_compute_means` 的 `mean_season` 分支对所有变量统一用 `np.nanmean`，未区分累计量（kg，应先季内 SUM 再跨年 AVG）与状态量（可直接 AVG），与后端 SQL 两步聚合逻辑不一致
+**修复方案**：新增 `units_map` 参数，kg 变量按年对季节内月份 `nansum` 后再跨年 `nanmean`；非 kg 变量保持直接 `nanmean`（数学等价）；units 从 netcdf 属性读取，不硬编码。修复后需重新运行 `make data-grid` 重生成 `static/grid/mean_season/` 数据
+**技术决策**：units 来源选择 netcdf 文件属性而非硬编码列表，保持脚本与数据源自洽，避免与 `backend/config.py` 的 KG_VARS 产生两处维护点
+**修复记录**：9512422 — fix(scripts): BUG-21 格点季平均 kg 变量改为两步聚合
+
+---
+
+## BUG-24 · `useXizangBoundary` initLayers 在组件卸载后仍可执行
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：进入"空间分布"模块，网络较慢时立即切换到其他模块；GeoJSON 异步加载完成后边界图层仍被加入地图
+**期望行为**：组件卸载后 initLayers 不再操作地图
+**实际行为**：`initLayers` 为异步函数，`onUnmounted` 调用 `hideLayers` 时 `layersAdded` 仍为 false，无法拦截；GeoJSON 加载完成后图层照常添加
+**相关文件**：`frontend/src/composables/useXizangBoundary.ts`
+**出现原因**：异步函数中 await 之后的代码不受 onUnmounted 同步拦截影响，需在异步续体内显式检查组件是否仍活跃
+**修复方案**：新增实例级 `let active = true` 标志；onUnmounted 时先置 `false` 再调用 hideLayers；initLayers 在入口及 await 完成后各检查一次，任一为 false 则提前返回
+**修复记录**：35b4185 — fix(frontend): BUG-24 useXizangBoundary 防卸载后 initLayers 异步续体操作地图
+
+---
+
+## BUG-25 · mean_season 两步聚合中 `nansum` 对全 NaN 格点返回 0
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：数据集中某格点某季节所有月份均为 NaN（缺测），查看该格点季平均值
+**期望行为**：全 NaN 输入的季节聚合结果保持 NaN，与后端 SQL NULL 行为一致
+**实际行为**：`np.nansum` 对全 NaN 切片返回 0.0，导致无数据格点被赋值 0
+**相关文件**：`scripts/netcdf_to_json.py`（BUG-21 修复引入）
+**出现原因**：numpy 的 `nansum` 设计上对全 NaN 输入返回 0，需额外判断后替换为 NaN
+**修复方案**：用 `np.where(np.all(np.isnan(arr), axis=0), np.nan, np.nansum(arr, axis=0))` 替代裸 `nansum`，全 NaN 格点直接填 NaN。修复后需重新运行 `make data-grid`
+**修复记录**：cabfff9 — fix(scripts): BUG-25 mean_season 季节聚合全 NaN 格点保持 NaN
+
+---
+
+## BUG-22 · 年平均表格 kg→mm 开关在当前变量为非 kg 时被隐藏
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：当前变量为非 kg 时打开历史弹窗 → 年平均 Tab，kg→mm 开关消失
+**期望行为**：年平均 Tab 始终显示 kg→mm 开关（表格含全部 15 个变量）
+**实际行为**：`v-if="anyKgVar"` 依赖当前选中变量，非 kg 变量时为 false，开关被隐藏
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：`anyKgVar` 基于 `activeVars`（图表已选变量）设计，未考虑年平均 Tab 渲染全量变量的场景
+**修复方案**：将按钮 `v-if` 改为 `(isAvgYearly || anyKgVar) && area_m2 !== null`，年平均 Tab 始终满足条件
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-23 · CSV 导出在数据未加载时静默输出仅含表头的空文件
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：切换到未加载过的 Tab 后立即点击"导出 CSV"
+**期望行为**：数据未就绪时禁用导出按钮
+**实际行为**：`getCached` 返回 null 被 `??[]` 降级为空数组，静默生成仅含表头的文件
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：exportCsv 未区分"未加载"和"空数据"两种状态
+**修复方案**：新增 `csvDataReady` computed（检查当前 Tab 缓存是否非 null），按钮加 `:disabled="!csvDataReady"` 及禁用样式
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-27 · RegionHistoryModal 点击图表跳帧时 goToIndex 在 setMode 之前调用
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：当前为逐月模式，历史弹窗切到逐年 Tab 后点击折线图数据点
+**期望行为**：主地图切换到对应年份的逐年帧
+**实际行为**：以旧 mode（逐月）的帧列表解释 dataIndex，跳转到错误帧
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：click handler 先调用 `goToIndex`（以当前 mode 解释索引），再调用 `setMode`，顺序颠倒
+**修复方案**：重排为先 `setMode(mode)` 再 `goToIndex(params.dataIndex)`，并仅在 item 存在时执行
+**修复记录**：5f5f5bd — fix(frontend): BUG-22 BUG-23 BUG-27 RegionHistoryModal 三项修复
+
+---
+
+## BUG-29 · ExportModule 进度条定时器在组件卸载时未清除
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：触发报告下载后立即切换到其他模块
+**期望行为**：组件卸载时清除进度条 interval
+**实际行为**：`clearInterval` 仅在下载 Promise 完成时执行，卸载后 interval 持续运行
+**相关文件**：`frontend/src/components/modules/ExportModule.vue`
+**出现原因**：未注册 `onUnmounted` 清理钩子
+**修复方案**：新增 `onUnmounted(() => { if (_timer) { clearInterval(_timer); _timer = null } })`
+**修复记录**：f1d7d8a — fix(frontend): BUG-29 ExportModule 组件卸载时清除进度条定时器
+
+---
+
+## BUG-30 · HelpModal 全局 Escape 监听与 GridModule 的 Escape 处理冲突
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：在空间分布模块选取格点后打开帮助弹窗，按 Esc 关闭
+**期望行为**：Esc 仅关闭帮助弹窗
+**实际行为**：同时触发 GridModule 的 clearPick()，意外清除已选取值点
+**相关文件**：`frontend/src/components/modals/HelpModal.vue`
+**出现原因**：两者均在 window 上以冒泡阶段注册 keydown 监听；GridModule 先注册故先执行，`stopImmediatePropagation` 对已执行的处理器无效
+**修复方案**：HelpModal 改用捕获阶段（`addEventListener('keydown', handler, true)`）；捕获阶段先于冒泡阶段执行，`stopImmediatePropagation` 可阻止 GridModule 的冒泡阶段处理器运行
+**修复记录**：444326f — fix(frontend): BUG-30 改用捕获阶段注册 Escape 监听，确保先于 GridModule 处理
+
+---
+
+## BUG-28 · HelpModal 未做焦点管理，键盘用户可 Tab 到遮罩后的控件
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：打开帮助弹窗，使用键盘 Tab 键导航
+**期望行为**：焦点移入弹窗内，Tab 在弹窗内循环，关闭后焦点回到触发按钮
+**实际行为**：弹窗打开后焦点未移入，Tab 可离开遮罩到达背后的地图控件
+**相关文件**：`frontend/src/components/modals/HelpModal.vue`
+**出现原因**：弹窗仅标注了 `aria-modal`，未实现对应的焦点管理逻辑
+**修复方案**：新增 `modalRef` 绑定；`onMounted` 记录 `prevFocus` 并聚焦首个可聚焦元素（关闭按钮）；`onKeydown` 增加 Tab/Shift+Tab 拦截，在 `getFocusable()` 返回的元素列表首尾间循环；`onUnmounted` 调用 `prevFocus?.focus()` 还原焦点
+**修复记录**：c65c548 — fix(frontend): BUG-28 HelpModal 焦点管理——open 聚焦、Tab 陷阱、close 还原
+
+---
+
+## BUG-31 · 年平均表格加载中状态与"无数据"状态无法区分
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：打开历史弹窗立即切换到"年平均" Tab（数据尚在请求中）
+**期望行为**：展示"加载中…"，与数据加载完成后值为 null 的情况区分
+**实际行为**：statsCache 未命中时以 null 值渲染所有行（显示 `—`），与无数据视觉上无法区分
+**相关文件**：`frontend/src/components/modals/RegionHistoryModal.vue`
+**出现原因**：loadActiveTab 仅控制数据请求，未向模板暴露"请求进行中"状态，模板无法区分"未加载"和"已加载但为空"
+**修复方案**：新增 `avgYearlyLoading` ref；loadActiveTab 在 avg_yearly 分支 await 前置 true、finally 保证清零；模板用 `v-if="avgYearlyLoading"` 显示"加载中…"，否则渲染表格
+**修复记录**：a3ea555 — fix(frontend): BUG-31 年平均表格区分加载中与无数据状态

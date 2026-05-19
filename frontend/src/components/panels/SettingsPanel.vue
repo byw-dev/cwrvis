@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useSettingsStore } from '@/stores/settings'
+import { useSettingsStore, FONT_SIZE_OPTIONS } from '@/stores/settings'
 import { BASEMAP_LIST } from '@/config/basemaps'
 
 defineEmits<{ close: [] }>()
@@ -43,6 +43,20 @@ function fmtTime(iso: string): string {
       </div>
 
       <div class="settings-body">
+        <!-- Spatial distribution -->
+        <div class="settings-section">
+          <div class="section-label">空间分布</div>
+          <label class="radio-item" :class="{ active: settings.showXizangBoundary }">
+            <input
+              type="checkbox"
+              :checked="settings.showXizangBoundary"
+              @change="settings.showXizangBoundary = ($event.target as HTMLInputElement).checked"
+            />
+            显示行政边界
+          </label>
+          <div class="section-hint">西藏全区外轮廓 + 7 个地市分界线</div>
+        </div>
+
         <!-- Basemap -->
         <div class="settings-section">
           <div class="section-label">底图</div>
@@ -77,6 +91,26 @@ function fmtTime(iso: string): string {
             </label>
           </div>
           <div class="section-hint">预设量程对逐年/逐月/月平均生效；季平均始终自动；用户手动输入优先级最高</div>
+        </div>
+
+        <!-- Font size -->
+        <div class="settings-section">
+          <div class="section-label">界面大小</div>
+          <div class="radio-group">
+            <label
+              v-for="opt in FONT_SIZE_OPTIONS" :key="opt.value"
+              class="radio-item"
+              :class="{ active: settings.fontSize === opt.value }"
+            >
+              <input
+                type="radio"
+                :value="opt.value"
+                :checked="settings.fontSize === opt.value"
+                @change="settings.fontSize = opt.value"
+              />
+              {{ opt.label }}
+            </label>
+          </div>
         </div>
       </div>
 

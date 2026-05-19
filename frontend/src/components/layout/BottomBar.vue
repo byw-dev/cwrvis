@@ -340,7 +340,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   position: absolute;
   top: 26px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.5625rem;
   color: var(--fg-3);
   transform: translateX(-50%);
   pointer-events: none;
@@ -364,7 +364,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--fg-3);
   letter-spacing: 0.2em;
   text-transform: uppercase;

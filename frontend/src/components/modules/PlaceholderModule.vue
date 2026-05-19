@@ -34,21 +34,21 @@ const def = MODULE_LIST.find((m): m is ModuleDef => m.id === props.moduleId)
 }
 
 .num {
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.3em;
   color: var(--fg-3);
   margin-bottom: 8px;
 }
 
 .name {
-  font-size: 20px;
+  font-size: 1.25rem;
   color: var(--fg-1);
   font-weight: 600;
   margin-bottom: 12px;
 }
 
 .msg {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--fg-3);
   letter-spacing: 0.1em;
 }

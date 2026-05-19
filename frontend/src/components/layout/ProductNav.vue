@@ -5,6 +5,7 @@ const props  = defineProps<{ activeModule: ModuleId }>()
 const emit   = defineEmits<{
   'update:activeModule': [id: ModuleId]
   'open-settings': []
+  'open-help': []
 }>()
 
 function select(id: ModuleId) {
@@ -20,8 +21,8 @@ function select(id: ModuleId) {
         <polygon points="9,0 18,6.3 14.4,18 3.6,18 0,6.3" fill="var(--accent)" />
       </svg>
       <div class="text">
-        <span class="t">云水资源数据平台</span>
-        <span class="s">CWR · DATA PLATFORM v0.1</span>
+        <span class="t">云水资源显示分析平台</span>
+        <span class="s">CWR · DATA PLATFORM v1.0</span>
       </div>
     </div>
 
@@ -38,7 +39,7 @@ function select(id: ModuleId) {
 
     <!-- Right end -->
     <div class="pn-end">
-      <button class="ico" title="帮助" aria-label="帮助">?</button>
+      <button class="ico" title="帮助" aria-label="帮助" @click="emit('open-help')">?</button>
       <button class="ico" title="设置" aria-label="设置" @click="emit('open-settings')">⚙</button>
     </div>
   </nav>

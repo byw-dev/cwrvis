@@ -7,9 +7,10 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { useRegionStore } from '@/stores/region'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
-import { VARS, VAR_GROUPS } from '@/config/vars'
+import { VARS, VAR_GROUPS, VAR_LIST } from '@/config/vars'
 import { buildItems } from '@/stores/time'
 import { isKgToMm } from '@/composables/useGridLayer'
+import { YEAR_MIN, YEAR_MAX } from '@/config/constants'
 import type { VarName, AggMode } from '@/types'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, LegendComponent, CanvasRenderer])
@@ -20,20 +21,52 @@ const regionStore = useRegionStore()
 const timeStore   = useTimeStore()
 const varStore    = useVarStore()
 
-type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season'
+type TabKey = 'monthly' | 'yearly' | 'avg_monthly' | 'avg_season' | 'avg_yearly'
 const TABS: { key: TabKey; label: string; mode: AggMode }[] = [
   { key: 'monthly',     label: '逐月',   mode: 'monthly'     },
   { key: 'yearly',      label: '逐年',   mode: 'yearly'      },
   { key: 'avg_monthly', label: '月平均', mode: 'avg_monthly' },
   { key: 'avg_season',  label: '季平均', mode: 'avg_season'  },
+  { key: 'avg_yearly',  label: '年平均', mode: 'avg_yearly'  },
 ]
 
-const activeTab    = ref<TabKey>('yearly')
-const activeVars   = ref<VarName[]>([varStore.selVar])
+const activeTab        = ref<TabKey>('yearly')
+const isAvgYearly      = computed(() => activeTab.value === 'avg_yearly')
+const avgYearlyLoading = ref(false)
+const activeVars       = ref<VarName[]>([varStore.selVar])
 const varPickerOpen = ref(false)
 
-const chartEl = ref<HTMLDivElement>()
-const chart   = shallowRef<echarts.ECharts | null>(null)
+const chartEl  = ref<HTMLDivElement>()
+const chart    = shallowRef<echarts.ECharts | null>(null)
+let   outTimer: ReturnType<typeof setTimeout> | null = null
+
+function initChart(el: HTMLDivElement) {
+  chart.value?.dispose()
+  const c = echarts.init(el, null, { renderer: 'canvas' })
+  chart.value = c
+  c.on('click', (params: any) => {
+    const mode = TABS.find(t => t.key === activeTab.value)!.mode
+    const items = buildItems(mode)
+    if (items[params.dataIndex]) {
+      timeStore.setMode(mode)
+      timeStore.goToIndex(params.dataIndex)
+      emit('close')
+    }
+  })
+  c.on('mouseover', (params: any) => {
+    if (outTimer) { clearTimeout(outTimer); outTimer = null }
+    if (params.componentType === 'series') hoveredSeries.value = params.seriesName
+  })
+  c.on('mouseout', (params: any) => {
+    if (params.componentType === 'series') {
+      outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
+    }
+  })
+  c.on('globalout', () => {
+    if (outTimer) { clearTimeout(outTimer); outTimer = null }
+    hoveredSeries.value = null
+  })
+}
 
 const SERIES_COLORS = ['#58e0ff', '#ffba49', '#88e07a', '#ff7c7c', '#b88aff']
 const SYMBOLS       = ['circle', 'rect', 'triangle', 'diamond', 'roundRect'] as const
@@ -55,9 +88,13 @@ const area_m2 = computed<number | null>(() =>
 const anyKgVar = computed(() =>
   activeVars.value.some(vn => VARS[vn].units === 'kg')
 )
-// true 仅当：用户已开启开关 + 当前有 kg var + 面积数据可用
+const csvDataReady = computed(() => {
+  const tab = TABS.find(t => t.key === activeTab.value)
+  return tab ? regionStore.getCached(regionStore.selRegionId, tab.mode) !== null : false
+})
+// true 仅当：用户已开启开关 + 当前有 kg var（或 avg_yearly 始终含 kg var）+ 面积数据可用
 const convKg = computed(() =>
-  isKgToMm.value && anyKgVar.value && area_m2.value !== null
+  isKgToMm.value && (isAvgYearly.value || anyKgVar.value) && area_m2.value !== null
 )
 
 function effUnit(vn: VarName): string {
@@ -73,12 +110,41 @@ async function ensureData(varName: VarName, mode: AggMode) {
 }
 
 async function loadActiveTab() {
-  const mode = TABS.find(t => t.key === activeTab.value)!.mode
+  const tab  = TABS.find(t => t.key === activeTab.value)!
+  const mode = tab.mode
+  if (isAvgYearly.value) {
+    avgYearlyLoading.value = true
+    try {
+      await regionStore.loadStats(regionStore.selRegionId, 'avg_yearly')
+    } finally {
+      avgYearlyLoading.value = false
+    }
+    return
+  }
+  avgYearlyLoading.value = false
   for (const vn of activeVars.value) {
     await ensureData(vn, mode)
   }
   updateChart()
 }
+
+// ── 年平均表格 ────────────────────────────────────────────────────────────────
+
+const tableRows = computed(() => {
+  const row = regionStore.getCached(regionStore.selRegionId, 'avg_yearly')?.[0] ?? null
+  return VAR_LIST.map(meta => {
+    const raw = row ? (row[meta.name] as number | null | undefined) : null
+    let val: number | null = typeof raw === 'number' ? raw : null
+    if (val !== null && convKg.value && meta.units === 'kg' && area_m2.value) {
+      val = val / area_m2.value
+    }
+    const unit = convKg.value && meta.units === 'kg' ? 'mm' : meta.units
+    const display = val === null ? '—'
+      : Math.abs(val) >= 1e6 ? val.toExponential(3)
+      : Number(val.toPrecision(4)).toString()
+    return { key: meta.display_name, longName: meta.long_name, unit, display }
+  })
+})
 
 async function addVar(vn: VarName) {
   if (activeVars.value.includes(vn)) return
@@ -216,6 +282,7 @@ function updateChart() {
       inactiveColor: '#3b4a5e',
       pageIconColor: '#58e0ff',
       pageTextStyle: { color: '#54606f', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' },
+      formatter: (name: string) => VARS[name as VarName]?.display_name ?? name,
     },
     grid: { top: 24, right: gridRight, bottom: 60, left: 8, containLabel: true },
     tooltip: {
@@ -238,7 +305,7 @@ function updateChart() {
           const weight = isActive ? '600' : '400'
           html += `<div style="color:${fg};font-weight:${weight};line-height:1.6">` +
             `<span style="color:${p.color}">● </span>` +
-            `${p.seriesName}: ${valStr} ${effUnit(p.seriesName as VarName)}` +
+            `${VARS[p.seriesName as VarName]?.display_name ?? p.seriesName}: ${valStr} ${effUnit(p.seriesName as VarName)}` +
             `</div>`
         }
         return html
@@ -263,35 +330,68 @@ function updateChart() {
 }
 
 onMounted(async () => {
-  if (chartEl.value) {
-    chart.value = echarts.init(chartEl.value, null, { renderer: 'canvas' })
-    chart.value.on('click', (params: any) => {
-      const mode = TABS.find(t => t.key === activeTab.value)!.mode
-      timeStore.goToIndex(params.dataIndex)
-      const items = buildItems(mode)
-      if (items[params.dataIndex]) { timeStore.setMode(mode); emit('close') }
-    })
-    let outTimer: ReturnType<typeof setTimeout> | null = null
-    chart.value.on('mouseover', (params: any) => {
-      if (outTimer) { clearTimeout(outTimer); outTimer = null }
-      if (params.componentType === 'series') hoveredSeries.value = params.seriesName
-    })
-    chart.value.on('mouseout', (params: any) => {
-      if (params.componentType === 'series') {
-        outTimer = setTimeout(() => { hoveredSeries.value = null }, 30)
-      }
-    })
-    chart.value.on('globalout', () => {
-      if (outTimer) { clearTimeout(outTimer); outTimer = null }
-      hoveredSeries.value = null
-    })
-    await loadActiveTab()
+  if (chartEl.value && !isAvgYearly.value) {
+    initChart(chartEl.value)
   }
+  await loadActiveTab()
 })
 
-watch(activeTab, loadActiveTab)
-watch(() => timeStore.currentIndex, updateChart)
-watch(isKgToMm, updateChart)
+watch(activeTab, async (newTab, oldTab) => {
+  // 从年平均切回折线 Tab：chartEl 是新元素，必须重建 chart 实例并重注册事件
+  if (newTab !== 'avg_yearly' && oldTab === 'avg_yearly') {
+    await nextTick()
+    if (chartEl.value) initChart(chartEl.value)
+  }
+  await loadActiveTab()
+})
+watch(() => timeStore.currentIndex, () => { if (!isAvgYearly.value) updateChart() })
+watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
+
+// ── CSV 导出 ──────────────────────────────────────────────────────────────────
+
+function exportCsv() {
+  const tab  = TABS.find(t => t.key === activeTab.value)!
+  const rows = regionStore.getCached(regionStore.selRegionId, tab.mode) ?? []
+  const varNames    = VAR_LIST.map(v => v.name as VarName)      // 数据 key，用于 row[key]
+  const displayNames = VAR_LIST.map(v => v.display_name)        // 展示用缩写，用于 CSV 列头
+  const convert  = isKgToMm.value && area_m2.value !== null
+
+  const timeColName = (
+    { yearly: 'year', monthly: 'year_month', avg_yearly: 'period',
+      avg_monthly: 'month', avg_season: 'season' } as const
+  )[activeTab.value]
+
+  const header = [timeColName, ...displayNames].join(',')
+
+  const dataRows = rows.map(row => {
+    let timeVal: string
+    switch (activeTab.value) {
+      case 'yearly':      timeVal = String(row.year ?? ''); break
+      case 'monthly':     timeVal = (row.year && row.month)
+        ? `${row.year}-${String(row.month).padStart(2, '0')}` : ''; break
+      case 'avg_yearly':  timeVal = `${YEAR_MIN}-${YEAR_MAX}`; break
+      case 'avg_monthly': timeVal = String(row.month ?? ''); break
+      case 'avg_season':  timeVal = String(row.season ?? ''); break
+    }
+    const vals = varNames.map(vn => {
+      const raw = row[vn as string]
+      if (typeof raw !== 'number') return ''
+      return convert && VARS[vn].units === 'kg' && area_m2.value
+        ? String(raw / area_m2.value)
+        : String(raw)
+    })
+    return [timeVal!, ...vals].join(',')
+  })
+
+  const unitSuffix = convert ? 'mm' : 'kg'
+  const csv  = [header, ...dataRows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const a    = document.createElement('a')
+  a.download = `${regionStore.selRegion?.name ?? regionStore.selRegionId}-${tab.label}-云水资源数据-${unitSuffix}.csv`
+  a.href     = URL.createObjectURL(blob)
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
 </script>
 
 <template>
@@ -301,12 +401,15 @@ watch(isKgToMm, updateChart)
         <div class="modal-head-left">
           <span class="modal-title">区域历史 · {{ regionStore.selRegion?.name ?? '—' }}</span>
           <button
-            v-if="anyKgVar && area_m2 !== null"
+            v-if="(isAvgYearly || anyKgVar) && area_m2 !== null"
             class="unit-toggle-btn"
             @click="toggleUnit"
           >{{ isKgToMm ? 'mm→kg' : 'kg→mm' }}</button>
         </div>
-        <button class="modal-close" @click="emit('close')">✕</button>
+        <div class="modal-head-right">
+          <button class="csv-btn" :disabled="!csvDataReady" @click="exportCsv">⬇ 导出 CSV</button>
+          <button class="modal-close" @click="emit('close')">✕</button>
+        </div>
       </div>
 
       <div class="modal-tabs">
@@ -317,8 +420,8 @@ watch(isKgToMm, updateChart)
           @click="activeTab = t.key"
         >{{ t.label }}</button>
 
-        <!-- Add button fixed on left, selected var chips grow to the right -->
-        <div class="var-chips">
+        <!-- Add button fixed on left, selected var chips grow to the right (hidden for avg_yearly) -->
+        <div v-if="!isAvgYearly" class="var-chips">
           <div class="dropdown-wrap" style="position: relative">
             <button class="add-var-btn" @click="varPickerOpen = !varPickerOpen">+ 添加变量</button>
             <div v-if="varPickerOpen" class="var-picker">
@@ -329,7 +432,7 @@ watch(isKgToMm, updateChart)
                   class="picker-item"
                   :disabled="activeVars.includes(vn)"
                   @click="addVar(vn)"
-                >{{ vn }} <span class="picker-name">{{ VARS[vn].long_name }}</span></button>
+                >{{ VARS[vn].display_name }} <span class="picker-name">{{ VARS[vn].long_name }}</span></button>
               </template>
             </div>
             <div v-if="varPickerOpen" class="picker-backdrop" @click="varPickerOpen = false" />
@@ -340,13 +443,35 @@ watch(isKgToMm, updateChart)
             class="var-chip"
             :style="{ borderColor: SERIES_COLORS[activeVars.indexOf(vn) % SERIES_COLORS.length] }"
           >
-            {{ vn }}
+            {{ VARS[vn].display_name }}
             <button v-if="activeVars.length > 1" class="chip-rm" @click="removeVar(vn)">×</button>
           </span>
         </div>
       </div>
 
-      <div ref="chartEl" class="chart-area" />
+      <!-- 折线图（非年平均 Tab） -->
+      <div v-if="!isAvgYearly" ref="chartEl" class="chart-area" />
+
+      <!-- 静态表格（年平均 Tab） -->
+      <div v-else class="avg-table-wrap">
+        <div v-if="avgYearlyLoading" class="avg-loading">加载中…</div>
+        <table v-else class="avg-table">
+          <thead>
+            <tr class="avg-head">
+              <th class="avg-th">变量</th>
+              <th class="avg-th">名称</th>
+              <th class="avg-th avg-th-val">数值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in tableRows" :key="row.key" class="avg-row">
+              <td class="avg-key">{{ row.key }}</td>
+              <td class="avg-name">{{ row.longName }}</td>
+              <td class="avg-val">{{ row.display }} <span class="avg-unit">{{ row.unit }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -371,7 +496,8 @@ watch(isKgToMm, updateChart)
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.625em 1em; border-bottom: 1px solid var(--line-1); background: var(--bg-2);
 }
-.modal-head-left { display: flex; align-items: center; gap: 1.25em; }
+.modal-head-left  { display: flex; align-items: center; gap: 1.25em; }
+.modal-head-right { display: flex; align-items: center; gap: 0.5em; }
 .modal-title { font-family: var(--font-mono); font-size: 0.75rem; color: var(--fg-1); }
 .unit-toggle-btn {
   background: none;
@@ -386,6 +512,19 @@ watch(isKgToMm, updateChart)
 .unit-toggle-btn:hover { background: var(--accent-faint); }
 .modal-close { background: none; border: none; color: var(--fg-3); cursor: pointer; font-size: 0.75rem; padding: 0.125em 0.375em; }
 .modal-close:hover { color: var(--fg-0); }
+
+.csv-btn {
+  background: none;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  padding: 0.2em 0.6em;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+}
+.csv-btn:hover { background: var(--accent-faint); }
+.csv-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .modal-tabs {
   display: flex; align-items: center;
@@ -427,4 +566,72 @@ watch(isKgToMm, updateChart)
 .picker-name { color: var(--fg-3); font-size: 0.625rem; }
 
 .chart-area { width: 100%; height: 460px; }
+
+.avg-table-wrap {
+  padding: 1.5em 2em;
+  overflow-y: auto;
+  max-height: 460px;
+}
+
+.avg-loading {
+  padding: 2em 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.avg-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.avg-row {
+  border-bottom: 1px solid var(--line-1);
+}
+.avg-row:last-child { border-bottom: none; }
+
+.avg-head { border-bottom: 1px solid var(--line-2); }
+
+.avg-th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--fg-2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 1em 0.5em 0;
+  font-weight: normal;
+  text-align: left;
+}
+.avg-th-val { text-align: right; padding-right: 0; }
+
+.avg-key {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  padding: 0.5em 1em 0.5em 0;
+  width: 5em;
+}
+
+.avg-name {
+  font-size: 0.75rem;
+  color: var(--fg-2);
+  padding: 0.5em 1em 0.5em 0;
+}
+
+.avg-val {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--fg-0);
+  padding: 0.5em 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.avg-unit {
+  font-size: 0.625rem;
+  color: var(--fg-3);
+  margin-left: 0.25em;
+}
 </style>
