@@ -92,9 +92,9 @@ const csvDataReady = computed(() => {
   const tab = TABS.find(t => t.key === activeTab.value)
   return tab ? regionStore.getCached(regionStore.selRegionId, tab.mode) !== null : false
 })
-// true 仅当：用户已开启开关 + 当前有 kg var + 面积数据可用
+// true 仅当：用户已开启开关 + 当前有 kg var（或 avg_yearly 始终含 kg var）+ 面积数据可用
 const convKg = computed(() =>
-  isKgToMm.value && anyKgVar.value && area_m2.value !== null
+  isKgToMm.value && (isAvgYearly.value || anyKgVar.value) && area_m2.value !== null
 )
 
 function effUnit(vn: VarName): string {
