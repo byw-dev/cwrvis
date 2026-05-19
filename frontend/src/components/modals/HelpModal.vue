@@ -82,10 +82,10 @@ onUnmounted(() => {
               <tbody>
                 <tr><td>水汽平均状态量</td><td>MM<sub>v</sub></td><td>T时段内，研究区域中的水汽状态量的平均值，单位：kg</td></tr>
                 <tr><td>水凝物平均状态量</td><td>MM<sub>h</sub></td><td>T时段内，研究区域中的水凝物状态量的平均值，单位：kg</td></tr>
-                <tr><td>水汽输入值</td><td>Q<sub>vi</sub></td><td>T时段内，研究区域边界上水平流入的水汽总量，单位：kg</td></tr>
-                <tr><td>水汽输出值</td><td>Q<sub>vo</sub></td><td>T时段内，研究区域边界上水平流出的水汽总量，单位：kg</td></tr>
-                <tr><td>水凝物输入值</td><td>Q<sub>hi</sub></td><td>T时段内，研究区域边界上水平流入的水凝物总量，单位：kg</td></tr>
-                <tr><td>水凝物输出值</td><td>Q<sub>ho</sub></td><td>T时段内，研究区域边界上水平流出的水凝物总量，单位：kg</td></tr>
+                <tr><td>水汽输入量</td><td>Q<sub>vi</sub></td><td>T时段内，研究区域边界上水平流入的水汽总量，单位：kg</td></tr>
+                <tr><td>水汽输出量</td><td>Q<sub>vo</sub></td><td>T时段内，研究区域边界上水平流出的水汽总量，单位：kg</td></tr>
+                <tr><td>水凝物输入量</td><td>Q<sub>hi</sub></td><td>T时段内，研究区域边界上水平流入的水凝物总量，单位：kg</td></tr>
+                <tr><td>水凝物输出量</td><td>Q<sub>ho</sub></td><td>T时段内，研究区域边界上水平流出的水凝物总量，单位：kg</td></tr>
                 <tr><td>云凝结</td><td>C<sub>vh</sub></td><td>T时段内，研究区域中，水汽通过凝结（含凝华）过程发生相态转化成为水凝物的质量，单位为：kg</td></tr>
                 <tr><td>地面降水</td><td>P<sub>s</sub></td><td>T时段内，研究区域中的累计降水量，单位：kg</td></tr>
                 <tr><td>水汽总量</td><td>GM<sub>v</sub></td><td>T时段内，参与研究区域大气水循环过程的所有水汽收入项，单位：kg</td></tr>
