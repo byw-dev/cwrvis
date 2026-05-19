@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     port: int = 8000
     dev_cors: bool = False  # 开发时设为 True 以允许 Vite dev server 跨域
 
-    model_config = {"env_file": "../conf/config.env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": "../conf/config.env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
