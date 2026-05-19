@@ -431,4 +431,4 @@
 **相关文件**：`deploy/install.sh`
 **出现原因**：安装逻辑对 `conf/` 无特殊处理，`rm -rf` 将整个版本目录连同用户数据一起删除；`config.env` 虽由后续逻辑重建，但其他用户文件无法还原
 **修复方案**：在 `rm -rf $DEST` 之前，将 `$DEST/conf/` 整体暂存至临时目录；新包复制完成后，将所有非 `*.example` 文件回写至 `$DEST/conf/`；`*.example` 保持新包版本不回写
-**修复记录**：（见代码提交）
+**修复记录**：677cc29 — fix(deploy): BUG-32 install.sh 升级时保护 conf/ 下用户文件
