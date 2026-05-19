@@ -77,8 +77,23 @@ fi
 
 # ── 安装文件 ──────────────────────────────────────────────────────────────────
 echo "[cwrvis] 复制文件至 ${DEST}..."
+
+# 升级场景：暂存 conf/ 下的用户文件，防止被新包覆盖
+CONF_STASH=""
+if [[ -d "$DEST/conf" ]]; then
+    CONF_STASH=$(mktemp -d)
+    cp -a "$DEST/conf/." "$CONF_STASH/"
+fi
+
 rm -rf "$DEST"
 cp -a "$PKG_DIR" "$DEST"
+
+# 还原用户文件（*.example 由包提供，保留新版本）
+if [[ -n "$CONF_STASH" ]]; then
+    find "$CONF_STASH" -maxdepth 1 -type f ! -name "*.example" -exec cp {} "$DEST/conf/" \;
+    rm -rf "$CONF_STASH"
+    echo "[cwrvis] 已还原 conf/ 用户文件"
+fi
 
 ln -sfn "$DEST" "$LINK"
 echo "[cwrvis] 符号链接已更新：${LINK} → ${DEST}"
