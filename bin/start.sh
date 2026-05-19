@@ -1,40 +1,24 @@
 #!/usr/bin/env bash
+# cwrvis 启动脚本
+# systemd 托管时由 ExecStart 调用；也可手动运行（前台运行，Ctrl+C 停止）
+# 前置：venv 须已由 install.sh 建立（app/.venv/）
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/app"
 VENV="$APP/.venv"
 
-# 加载环境变量
-[ -f "$ROOT/conf/config.env" ] && source "$ROOT/conf/config.env"
-
-# 首次启动：建 venv 并安装依赖（优先离线 wheels/，否则在线 fallback）
-if [ ! -x "$VENV/bin/python" ]; then
-    echo "[cwrvis] 初始化 Python 虚拟环境..."
-    uv venv "$VENV"
-    if [ -d "$APP/wheels" ] && [ -f "$APP/requirements.txt" ]; then
-        echo "[cwrvis] 离线安装依赖（使用内嵌 wheel 缓存）..."
-        uv pip install \
-            --python "$VENV/bin/python" \
-            --no-index \
-            --find-links "$APP/wheels" \
-            -r "$APP/requirements.txt"
-    else
-        echo "[cwrvis] 在线安装依赖（需要网络）..."
-        uv pip install --python "$VENV/bin/python" "$APP"
-    fi
-    echo "[cwrvis] Python 环境就绪"
+if [[ ! -x "$VENV/bin/python" ]]; then
+    echo "[error] Python 虚拟环境不存在：${VENV}" >&2
+    echo "  请先运行 install.sh 完成安装" >&2
+    exit 1
 fi
 
-mkdir -p "$ROOT/logs"
-cd "$APP"
+[ -f "$ROOT/conf/config.env" ] && source "$ROOT/conf/config.env"
 
-"$VENV/bin/python" -m uvicorn main:app \
+cd "$APP"
+exec "$VENV/bin/python" -m uvicorn main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers 2 \
-    --log-level info \
-    >> "$ROOT/logs/app.log" 2>&1 &
-
-echo $! > "$ROOT/logs/app.pid"
-echo "cwrvis started  (pid=$(cat "$ROOT/logs/app.pid")  port=${PORT:-8000})"
+    --log-level info
