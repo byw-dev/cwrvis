@@ -306,3 +306,31 @@ LeftRail 侧边栏图标语义映射：旧"资源量"图标 → 新"总量"，�
 5. **验证**：全量回归测试，确认数据正确展示
 
 > 相关 backlog 条目：见 `docs/tasks/backlog.md`（F-32、F-33）。
+
+---
+
+### DEC-019：部署包双模式（在线/离线）+ install.sh 内置于分发包
+
+**状态**：Active（待 D-04 实现）
+
+**背景**：D-01 阶段的分发包仅有离线一种模式（预置 wheels），且 `bin/start.sh` 在首次启动时懒建 venv，需要目标机安装 `uv`。这带来两个问题：①包体积较大（wheels 约数十 MB），网络条件好的场景浪费；② `uv` 成了运行时依赖，与"离线可用"初衷矛盾。部署流程也需要管理员手动创建用户、安装 systemd service，操作繁琐。
+
+**决策**：
+
+1. **双模式分发包**
+   - `make package` → 在线版（`cwrvis-{version}.tar.gz`）：不含 wheels，体积小；目标机须有 `uv`（报错退出，不自动安装）
+   - `make package-offline` → 离线版（`cwrvis-{version}-offline.tar.gz`）：含 `app/wheels/`，锁定 Python 3.11；不依赖 `uv`，用 `python3.11 -m venv` + `pip install --no-index`
+
+2. **install.sh 内置于分发包根目录**，解压后直接 `sudo ./install.sh`，自动完成：创建系统用户 `cwrvis`、建 venv、安装依赖、处理 `config.env`、安装并启用 systemd service。模式由脚本自动检测（`app/wheels/` 是否存在）。
+
+3. **systemd `Type=simple`**：uvicorn 前台运行，systemd 全权管理进程生命周期与日志（journald）。废弃 PID 文件方式（`Type=forking`）。
+
+4. **专用系统用户 `cwrvis`**：不复用 `www-data`，最小权限。
+
+5. **venv 在 install.sh 安装阶段建立**：不再在 `bin/start.sh` 首次启动时懒建。install.sh 完成后 venv 已就绪，依赖错误在安装时暴露。
+
+6. **`conf/config.env` 处理**：分发包仅含 `conf/config.env.example`。install.sh 首次部署时将其复制为 `config.env`；升级时若已有 `config.env` 则将新版 example 重命名为 `config.env.pkgnew` 并提示管理员比对。
+
+**原因**：在线版减小包体积，适合网络环境好的场景；离线版保持"无网可用"能力且去掉对 `uv` 的运行时依赖；install.sh 内置让部署降至一条命令；`Type=simple` 是 systemd 推荐用法，更易于监控与日志收集。
+
+**代价/权衡**：需维护两个 Makefile target；离线版固定 Python 3.11，目标机若无此版本需手动安装（Ubuntu 22.04 默认 3.10，需 `apt install python3.11`）。

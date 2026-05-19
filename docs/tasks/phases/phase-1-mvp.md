@@ -554,6 +554,15 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - HTTPS：Let's Encrypt certbot 配置示例
   - `← needs: D-01`（配置编写不依赖，但测试依赖 D-01）
 
+- [ ] `TODO` **D-04** `[M]` 部署包双模式重构 + install.sh（DEC-019）
+  - **Makefile**：新增 `make package-offline` target；`make package` 改为在线版（不含 wheels）；`conf/config.env.example` 仅以 `.example` 后缀打入包，不再重命名
+  - **`deploy/install.sh`**（新建，打入分发包根目录）：自动检测在线/离线模式、创建系统用户 `cwrvis`、建 venv + 安装依赖、处理 `config.env`（首次复制/升级时改名 `.pkgnew`）、安装并 enable systemd service
+  - **`bin/start.sh`**：简化为纯启动脚本（删除懒建 venv 逻辑，venv 由 install.sh 在安装时建立）；改为前台运行 uvicorn（配合 `Type=simple`）
+  - **`bin/stop.sh`**：删除 PID 文件逻辑（systemd 管理进程，手动 stop 改用 `systemctl stop cwrvis`）
+  - **`deploy/systemd/cwrvis.service`**：`Type=simple`、`User=cwrvis`、`ExecStart` 直接调 uvicorn、删除 `PIDFile` / `ExecStop`
+  - **`docs/design/deployment.md`**：同步更新设计文档
+  - `← needs: D-01`（在 D-01 基础上重构）
+
 ---
 
 ## 进度统计
@@ -563,8 +572,8 @@ D-02 / D-03 可在 D-01 完成后并行进行。
 | S 脚本 | 6 | 6 | 0 | 0 | 0 |
 | B 后端 | 8 | 8 | 0 | 0 | 0 |
 | F 前端 | 29 | 25 | 0 | 1 | 3 |
-| D 部署 | 3 | 3 | 0 | 0 | 0 |
-| **合计** | **46** | **42** | **0** | **1** | **3** |
+| D 部署 | 4 | 3 | 0 | 1 | 0 |
+| **合计** | **47** | **42** | **0** | **2** | **3** |
 
 > F BLOCKED 3 = F-22 / F-23 / F-24（格点等值线、高低点标注、数值标注；依赖技术方案决策）
 

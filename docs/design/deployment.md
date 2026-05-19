@@ -1,31 +1,40 @@
 # 部署与运维设计 — cwrvis
 
-> 文档版本：v2.0  
+> 文档版本：v3.0
 > 对应模块：`bin/`、`deploy/`
 
 ---
 
 ## 部署理念
 
-**单进程、单压缩包、离线可用**。FastAPI 同时承担 REST API 与静态文件服务，无需 Nginx。
+**单进程、单压缩包、一键安装**。FastAPI 同时承担 REST API 与静态文件服务，无需 Nginx。
 
-分发包内预嵌 Linux x86_64 wheel 缓存，目标机只需安装 `uv`，**无需网络**即可完成依赖安装和启动。构建机（macOS / Linux 均可）在 `make package` 时同时指定 `manylinux_2_17_x86_64` 和 `manylinux_2_28_x86_64` 两个 platform tag 预取 Linux wheel（不同包使用不同 ABI，两个 tag 的 wheel 均兼容 Ubuntu 20.04+），实现"在 macOS 构建、Linux 离线运行"。
+分发包内置 `install.sh`，解压后运行一条命令完成用户创建、依赖安装、systemd 注册。提供**在线**和**离线**两种分发包（DEC-019）：
+
+| 模式 | Makefile target | 产物 | 目标机前置要求 |
+|------|----------------|------|--------------|
+| 在线 | `make package` | `cwrvis-{version}.tar.gz` | `uv`（[安装方法](https://docs.astral.sh/uv/)） |
+| 离线 | `make package-offline` | `cwrvis-{version}-offline.tar.gz` | `python3.11`（无需网络） |
+
+`install.sh` 自动检测模式（通过 `app/wheels/` 目录是否存在），用户无需手动指定。
 
 ---
 
 ## 分发包结构
 
+两种模式的包结构相同，离线版额外包含 `app/wheels/`：
+
 ```
 cwrvis-{version}/
+├── install.sh            # 一键部署脚本（解压后直接 sudo ./install.sh）
 ├── bin/
-│   ├── start.sh          # 启动服务（首次自动建 venv，支持离线）
-│   └── stop.sh           # 停止服务（读 PID 文件）
+│   └── start.sh          # 启动脚本（由 systemd ExecStart 调用，也可手动运行）
 ├── app/                  # FastAPI 应用代码（来自仓库 backend/）
 │   ├── main.py
 │   ├── routers/
 │   ├── pyproject.toml
-│   ├── requirements.txt  # uv export 生成的锁定依赖清单（供离线安装使用）
-│   └── wheels/           # Linux x86_64 wheel 缓存（make package 时预取）
+│   ├── requirements.txt  # 锁定依赖清单
+│   └── wheels/           # 【仅离线版】Linux x86_64 wheel 缓存
 ├── static/               # FastAPI StaticFiles 托管目录（对外可访问）
 │   ├── grid/             # 格点 JSON + meta.json（预生成，约 33MB）
 │   ├── shapes/           # 区域 GeoJSON（region_id 命名）
@@ -34,8 +43,8 @@ cwrvis-{version}/
 ├── db/                   # 仅 FastAPI 内部访问，不挂载为静态路由
 │   └── stats.db
 ├── conf/
-│   └── config.env        # 环境变量，start.sh 启动时加载
-└── logs/                 # 运行日志（空目录占位）
+│   └── config.env.example  # 环境变量模板（install.sh 首次安装时复制为 config.env）
+└── logs/                 # 空目录占位（日志主要由 journald 接管）
 ```
 
 ---
@@ -58,9 +67,31 @@ app.mount("/",        StaticFiles(directory="../static/web", html=True), name="w
 
 ---
 
+## install.sh 行为
+
+`install.sh` 须以 root 权限运行（`sudo ./install.sh`），执行以下步骤：
+
+1. **检测模式**：`app/wheels/` 存在 → 离线模式；否则 → 在线模式
+2. **前置检查**：
+   - 在线模式：检查 `uv` 是否可用，不可用则报错退出并提示安装命令
+   - 离线模式：检查 `python3.11` 是否可用，不可用则报错退出并提示 `apt install python3.11`
+3. **创建系统用户** `cwrvis`（若已存在则跳过）：无家目录、禁止登录 shell
+4. **安装文件**：将分发包内容复制至 `/opt/cwrvis-{version}/`，创建符号链接 `/opt/cwrvis` → `/opt/cwrvis-{version}/`
+5. **处理 `config.env`**：
+   - 首次安装（`/opt/cwrvis/conf/config.env` 不存在）：将 `config.env.example` 复制为 `config.env`
+   - 升级安装（已有 `config.env`）：将新版 example 保存为 `config.env.pkgnew`，提示管理员比对差异
+6. **建立 venv + 安装依赖**：
+   - 在线模式：`uv venv app/.venv && uv pip install -r app/requirements.txt`
+   - 离线模式：`python3.11 -m venv app/.venv && app/.venv/bin/pip install --no-index --find-links app/wheels/ -r app/requirements.txt`
+7. **设置目录权限**：`chown -R cwrvis:cwrvis /opt/cwrvis-{version}/`
+8. **安装 systemd service**：复制 `deploy/systemd/cwrvis.service` 到 `/etc/systemd/system/`，`daemon-reload`，`enable --now`
+
+---
+
 ## 启动脚本
 
-**`bin/start.sh`**（首次自动建 venv，优先离线 wheel 缓存）：
+**`bin/start.sh`**（venv 已由 install.sh 建立，此脚本只负责启动）：
+
 ```bash
 #!/usr/bin/env bash
 set -e
@@ -70,47 +101,15 @@ VENV="$APP/.venv"
 
 [ -f "$ROOT/conf/config.env" ] && source "$ROOT/conf/config.env"
 
-# 首次启动：建 venv 并安装依赖（优先离线 wheels/，否则在线）
-if [ ! -x "$VENV/bin/python" ]; then
-    echo "[cwrvis] 初始化 Python 虚拟环境..."
-    uv venv "$VENV"
-    if [ -d "$APP/wheels" ] && [ -f "$APP/requirements.txt" ]; then
-        echo "[cwrvis] 离线安装依赖（使用内嵌 wheel 缓存）..."
-        uv pip install --python "$VENV/bin/python" \
-            --no-index --find-links "$APP/wheels" \
-            -r "$APP/requirements.txt"
-    else
-        echo "[cwrvis] 在线安装依赖（需要网络）..."
-        uv pip install --python "$VENV/bin/python" "$APP"
-    fi
-fi
-
-mkdir -p "$ROOT/logs"
 cd "$APP"
-
-"$VENV/bin/python" -m uvicorn main:app \
+exec "$VENV/bin/python" -m uvicorn main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers 2 \
-    --log-level info \
-    >> "$ROOT/logs/app.log" 2>&1 &
-
-echo $! > "$ROOT/logs/app.pid"
-echo "cwrvis started  (pid=$(cat "$ROOT/logs/app.pid")  port=${PORT:-8000})"
+    --log-level info
 ```
 
-**`bin/stop.sh`**：
-```bash
-#!/usr/bin/env bash
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PID_FILE="$ROOT/logs/app.pid"
-if [ -f "$PID_FILE" ]; then
-    kill "$(cat "$PID_FILE")" && rm "$PID_FILE"
-    echo "cwrvis stopped"
-else
-    echo "no pid file found"
-fi
-```
+> `exec` 使 uvicorn 替换 shell 进程，systemd 直接追踪 uvicorn PID，无需 PID 文件。
 
 ---
 
@@ -126,19 +125,7 @@ GRID_DIR=../static/grid
 
 ---
 
-## 服务器规格要求
-
-| 项目 | 最低配置（演示） | 说明 |
-|------|-----------------|------|
-| CPU | 2 核 | 后端几乎无计算，静态文件 I/O 主导 |
-| 内存 | 2 GB | 系统 + uvicorn 2 worker（各 ~80MB） |
-| 磁盘 | 20 GB SSD | 静态数据约 100MB，系统和日志留余量 |
-| 带宽 | 5 Mbps | 单用户加载一个 var 月颗粒度切片约 2MB |
-| 操作系统 | Linux（Ubuntu 22.04 推荐） | |
-
----
-
-## 进程管理（systemd，可选）
+## systemd service
 
 文件：`deploy/systemd/cwrvis.service`
 
@@ -148,24 +135,51 @@ Description=cwrvis Web Service
 After=network.target
 
 [Service]
-Type=forking
-User=www-data
+Type=simple
+User=cwrvis
 WorkingDirectory=/opt/cwrvis
 ExecStart=/opt/cwrvis/bin/start.sh
-ExecStop=/opt/cwrvis/bin/stop.sh
-PIDFile=/opt/cwrvis/logs/app.pid
 Restart=on-failure
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-启用：
+常用命令：
+
 ```bash
-sudo cp deploy/systemd/cwrvis.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now cwrvis
+sudo systemctl status  cwrvis
+sudo systemctl restart cwrvis
+sudo systemctl stop    cwrvis
+journalctl -u cwrvis -f        # 实时日志
+journalctl -u cwrvis --since "1 hour ago"
+```
+
+---
+
+## 服务器规格要求
+
+| 项目 | 最低配置（演示） | 说明 |
+|------|-----------------|------|
+| CPU | 2 核 | 后端几乎无计算，静态文件 I/O 主导 |
+| 内存 | 2 GB | 系统 + uvicorn 2 worker（各 ~80MB） |
+| 磁盘 | 20 GB SSD | 静态数据约 100MB，系统和日志留余量 |
+| 带宽 | 5 Mbps | 单用户加载一个 var 月颗粒度切片约 2MB |
+| 操作系统 | Linux x86_64（Ubuntu 22.04 推荐） | |
+
+**离线版额外要求**：目标机须有 `python3.11`。Ubuntu 22.04 默认 Python 3.10，需手动安装：
+
+```bash
+sudo apt install python3.11
+```
+
+**在线版额外要求**：目标机须有 `uv`：
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ---
@@ -175,43 +189,51 @@ sudo systemctl enable --now cwrvis
 ### 首次部署
 
 ```bash
-# 0. 构建机（开发机）打包（需已运行 make setup 初始化环境）
-make package VERSION=1.0.0
-# 产物：dist/cwrvis-1.0.0.tar.gz（内含 wheels/ 缓存，支持离线安装）
+# 1. 构建机打包
+make package VERSION=1.0.0          # 在线版
+make package-offline VERSION=1.0.0  # 离线版
 
-# 1. 目标机安装 uv（仅首次，约 5s）
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 2. 上传至目标机
+scp dist/cwrvis-1.0.0.tar.gz user@server:~
 
-# 2. 上传并解压分发包
-scp dist/cwrvis-1.0.0.tar.gz user@server:/opt/
-ssh user@server "cd /opt && tar xf cwrvis-1.0.0.tar.gz && ln -sfn cwrvis-1.0.0 cwrvis"
+# 3. 解压并运行安装脚本（install.sh 自动完成所有配置）
+ssh user@server
+tar xf cwrvis-1.0.0.tar.gz
+sudo cwrvis-1.0.0/install.sh
 
-# 3. 配置环境变量（按需修改 PORT 等）
-vim /opt/cwrvis/conf/config.env
+# 4. 按提示检查并按需修改配置
+sudo vim /opt/cwrvis/conf/config.env
 
-# 4. 启动（首次自动离线安装依赖，约 10s）
-/opt/cwrvis/bin/start.sh
+# 5. 若修改了配置，重启服务
+sudo systemctl restart cwrvis
 
-# 5. 验证
+# 6. 验证
 curl http://localhost:8000/api/v1/health
 ```
 
-### 应用代码更新
+### 升级部署
 
 ```bash
-# 上传新版本包，解压后替换 app/ 目录
-/opt/cwrvis/bin/stop.sh
-rsync -av cwrvis-{new-version}/app/ user@server:/opt/cwrvis/app/
-ssh user@server "/opt/cwrvis/bin/start.sh"
+# 1. 构建新版本包并上传
+make package VERSION=1.1.0
+scp dist/cwrvis-1.1.0.tar.gz user@server:~
+
+# 2. 解压并运行安装脚本（自动停服、替换、重启）
+ssh user@server
+tar xf cwrvis-1.1.0.tar.gz
+sudo cwrvis-1.1.0/install.sh
+
+# 3. 若升级包含新配置项，install.sh 会生成 config.env.pkgnew，手动比对
+diff /opt/cwrvis/conf/config.env /opt/cwrvis/conf/config.env.pkgnew
 ```
 
-### 静态数据更新
+### 静态数据更新（无需重启）
 
 ```bash
-# 在开发机重新运行预生成脚本（见 data-pipeline.md）
-# 同步到服务器，无需重启服务
-rsync -av output/static/grid/ user@server:/opt/cwrvis/static/grid/
-rsync -av output/static/db/   user@server:/opt/cwrvis/db/
+# 在开发机重新运行预生成脚本后，同步至服务器
+rsync -av static/grid/    user@server:/opt/cwrvis/static/grid/
+rsync -av static/reports/ user@server:/opt/cwrvis/static/reports/
+rsync -av db/stats.db     user@server:/opt/cwrvis/db/
 ```
 
 ---
@@ -228,11 +250,9 @@ GET /api/v1/health
 ## 日志
 
 ```bash
-# 实时跟踪
-tail -f /opt/cwrvis/logs/app.log
-
-# systemd 方式
-journalctl -u cwrvis -f
+journalctl -u cwrvis -f                      # 实时跟踪
+journalctl -u cwrvis --since "1 hour ago"    # 最近一小时
+journalctl -u cwrvis --since today           # 今天
 ```
 
 ---
@@ -244,7 +264,6 @@ journalctl -u cwrvis -f
 直接开放 8000 端口，无需额外组件：
 
 ```bash
-# Ubuntu UFW 防火墙
 sudo ufw allow 8000/tcp
 sudo ufw reload
 ```
@@ -274,7 +293,6 @@ server {
     ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
 
-    # 格点 JSON 大文件（最大约 2MB）
     client_max_body_size 10m;
 
     location / {
@@ -289,15 +307,12 @@ server {
 ```
 
 ```bash
-# 启用站点
 sudo ln -s /etc/nginx/sites-available/cwrvis /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-
-# 申请免费证书（需域名已解析）
 sudo certbot --nginx -d example.com
 ```
 
-> **注意**：使用 Nginx 后 `config.env` 中的 `PORT` 保持 8000（仅本地监听），防火墙**只开放 80/443**，关闭 8000 对外访问。
+> 使用 Nginx 后防火墙只开放 80/443，关闭 8000 对外访问。
 
 ```bash
 sudo ufw allow 80/tcp
@@ -319,17 +334,17 @@ sudo ufw reload
 
 ---
 
-### 常见问题
+## 常见问题
 
 **启动后无法访问**
-1. 检查进程：`cat /opt/cwrvis/logs/app.pid` → `ps aux | grep uvicorn`
+1. 检查服务状态：`sudo systemctl status cwrvis`
 2. 检查端口：`ss -tlnp | grep 8000`
 3. 检查防火墙：`sudo ufw status`
-4. 检查日志：`tail -50 /opt/cwrvis/logs/app.log`
+4. 检查日志：`journalctl -u cwrvis -n 50`
 
-**依赖安装失败（离线环境）**
+**依赖安装失败（离线模式）**
 - 确认 `app/wheels/` 目录非空：`ls /opt/cwrvis/app/wheels/ | wc -l`（应有数十个文件）
-- 若 wheels 不完整，在有网络的机器重新 `make package` 后上传
+- 若 wheels 不完整，在有网络的机器重新 `make package-offline` 后重新安装
 
 **重启后服务未自动启动**
 - 确认 systemd 已启用：`sudo systemctl is-enabled cwrvis`
