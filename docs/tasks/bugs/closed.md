@@ -416,3 +416,19 @@
 **出现原因**：loadActiveTab 仅控制数据请求，未向模板暴露"请求进行中"状态，模板无法区分"未加载"和"已加载但为空"
 **修复方案**：新增 `avgYearlyLoading` ref；loadActiveTab 在 avg_yearly 分支 await 前置 true、finally 保证清零；模板用 `v-if="avgYearlyLoading"` 显示"加载中…"，否则渲染表格
 **修复记录**：a3ea555 — fix(frontend): BUG-31 年平均表格区分加载中与无数据状态
+
+---
+
+## BUG-32 · install.sh 升级时覆盖 `conf/` 下的用户自建文件
+
+**发现时间**：2026-05-19
+**严重程度**：Major
+**重现步骤**：
+1. 在 `/opt/cwrvis/conf/` 下创建任意文件（如 `config.env.bak`）
+2. 解压新版分发包，执行 `sudo ./install.sh`
+**期望行为**：升级后 `conf/` 下的用户文件（`config.env`、备份文件等）原样保留
+**实际行为**：`install.sh` 以 `rm -rf $DEST && cp -a $PKG_DIR $DEST` 全量替换安装目录，`conf/` 下所有不属于分发包的文件被清除
+**相关文件**：`deploy/install.sh`
+**出现原因**：安装逻辑对 `conf/` 无特殊处理，`rm -rf` 将整个版本目录连同用户数据一起删除；`config.env` 虽由后续逻辑重建，但其他用户文件无法还原
+**修复方案**：在 `rm -rf $DEST` 之前，将 `$DEST/conf/` 整体暂存至临时目录；新包复制完成后，将所有非 `*.example` 文件回写至 `$DEST/conf/`；`*.example` 保持新包版本不回写
+**修复记录**：（见代码提交）

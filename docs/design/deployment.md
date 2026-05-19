@@ -76,7 +76,7 @@ app.mount("/",        StaticFiles(directory="../static/web", html=True), name="w
    - 在线模式：检查 `uv` 是否可用，不可用则报错退出并提示安装命令
    - 离线模式：检查 `python3.11` 是否可用，不可用则报错退出并提示 `apt install python3.11`
 3. **创建系统用户** `cwrvis`（若已存在则跳过）：无家目录、禁止登录 shell
-4. **安装文件**：将分发包内容复制至 `/opt/cwrvis-{version}/`，创建符号链接 `/opt/cwrvis` → `/opt/cwrvis-{version}/`
+4. **安装文件**：将分发包内容复制至 `/opt/cwrvis-{version}/`，创建符号链接 `/opt/cwrvis` → `/opt/cwrvis-{version}/`；升级时先暂存旧 `conf/` 下所有非 `.example` 文件，复制完成后回写，防止用户文件被覆盖
 5. **处理 `config.env`**：
    - 首次安装（`/opt/cwrvis/conf/config.env` 不存在）：将 `config.env.example` 复制为 `config.env`
    - 升级安装（已有 `config.env`）：将新版 example 保存为 `config.env.pkgnew`，提示管理员比对差异
@@ -106,7 +106,8 @@ exec "$VENV/bin/python" -m uvicorn main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8000}" \
     --workers 2 \
-    --log-level info
+    --log-level info \
+    --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
 ```
 
 > `exec` 使 uvicorn 替换 shell 进程，systemd 直接追踪 uvicorn PID，无需 PID 文件。
@@ -121,6 +122,9 @@ DB_PATH=../db/stats.db
 STATIC_ROOT=../static
 REPORT_DIR=../static/reports
 GRID_DIR=../static/grid
+
+# 反向代理场景：信任的上游 IP，见"反向代理真实 IP 透传"节
+FORWARDED_ALLOW_IPS=
 ```
 
 ---
@@ -331,6 +335,42 @@ sudo ufw reload
 | 80 | HTTP（重定向） | 可选 | 开放 |
 | 443 | HTTPS | — | 开放 |
 | 8000 | FastAPI（直接访问） | 开放 | **关闭** |
+
+---
+
+## 反向代理真实 IP 透传
+
+当 cwrvis 位于反向代理（Nginx）后端时，uvicorn access log 默认只能看到代理机器的 IP。需要同时配置 **Nginx 端**和 **cwrvis 端**，才能让日志记录真实客户端 IP。
+
+### Nginx 端（已有 `proxy_set_header` 时无需修改）
+
+在 `location /` 块中确保存在：
+
+```nginx
+proxy_set_header   X-Real-IP        $remote_addr;
+proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+```
+
+方案 B 的配置模板已包含这两行。
+
+### cwrvis 端
+
+在 `conf/config.env` 中填写 Nginx 机器的 LAN IP：
+
+```bash
+# 单台代理
+FORWARDED_ALLOW_IPS=192.168.1.10
+
+# 多台代理，逗号分隔
+FORWARDED_ALLOW_IPS=192.168.1.10,192.168.1.11
+
+# 封闭内网，信任所有上游（谨慎使用）
+FORWARDED_ALLOW_IPS=*
+```
+
+`start.sh` 将此值传给 uvicorn 的 `--forwarded-allow-ips` 参数。uvicorn 内置 `ProxyHeadersMiddleware`，收到来自受信任上游的请求时，会自动将 `request.client.host` 改写为 `X-Forwarded-For` 中的真实 IP，access log 随之正确。
+
+**未配置时的默认行为**：`FORWARDED_ALLOW_IPS` 为空时，`start.sh` 回退到 `127.0.0.1`——只有本机发起的请求才会被解析代理头，适用于直连场景，不影响非代理部署。
 
 ---
 

@@ -563,6 +563,12 @@ D-02 / D-03 可在 D-01 完成后并行进行。
   - **`docs/design/deployment.md`**：同步更新设计文档
   - `← needs: D-01`（在 D-01 基础上重构）
 
+- [x] `DONE` **D-05** `[S]` 反向代理真实 IP 透传
+  - **`conf/config.env.example`**：新增 `FORWARDED_ALLOW_IPS` 环境变量，用于指定受信任的上游代理 IP
+  - **`bin/start.sh`**：向 uvicorn 传递 `--forwarded-allow-ips`，未配置时回退 `127.0.0.1`（不影响直连场景）
+  - **`docs/design/deployment.md`**：新增"反向代理真实 IP 透传"节，说明 Nginx 端与 cwrvis 端的配置方式
+  - `← needs: D-04`
+
 ---
 
 ## 进度统计
