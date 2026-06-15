@@ -78,11 +78,12 @@ fi
 # ── 安装文件 ──────────────────────────────────────────────────────────────────
 echo "[cwrvis] 复制文件至 ${DEST}..."
 
-# 升级场景：暂存 conf/ 下的用户文件，防止被新包覆盖
+# 升级场景：从当前安装目录（$LINK）暂存 conf/，防止被新包覆盖
+# 注意：此时 $DEST 尚未创建，用户文件在 $LINK/conf（旧版本 symlink 指向处）
 CONF_STASH=""
-if [[ -d "$DEST/conf" ]]; then
+if [[ -d "$LINK/conf" ]]; then
     CONF_STASH=$(mktemp -d)
-    cp -a "$DEST/conf/." "$CONF_STASH/"
+    cp -a "$LINK/conf/." "$CONF_STASH/"
 fi
 
 rm -rf "$DEST"

@@ -448,3 +448,18 @@
 **出现原因**：新版 pydantic-settings（远端 Python 3.14 环境）默认 `extra='forbid'`；`FORWARDED_ALLOW_IPS` 是 shell/uvicorn 层变量，不需要进入 Python `Settings`，但 `model_config` 未声明容忍策略
 **修复方案**：`model_config` 加 `"extra": "ignore"`，pydantic-settings 忽略所有未声明字段，不影响已有字段的读取与校验
 **修复记录**：a3e010e — fix(backend): Settings model_config 加 extra=ignore 兼容未知环境变量
+
+---
+
+## BUG-26 · `useXizangBoundary` GeoJSON 缓存未区分底图坐标系
+
+**发现时间**：2026-05-19
+**严重程度**：Minor
+**重现步骤**：
+1. 进入"空间分布"模块，边界线正常加载（例如 GCJ-02 底图）
+2. 在设置中切换到 WGS-84 底图（或反之）
+**期望行为**：底图切换后边界线坐标随之更新，与底图对齐
+**实际行为**：`geoCache` 以 shape id 为 key 缓存已偏移坐标，切换底图后边界线沿用错误坐标产生偏移
+**相关文件**：`frontend/src/composables/useXizangBoundary.ts`
+**修复方案**：`geoCache` 改存原始（未偏移）GeoJSON；新增 `applyCoordSys()` 在 `addSource`/`setData` 时按当前底图实时计算偏移；新增 `watch(settings.basemap)` 在切换底图时调 `setData()` 刷新 MapLibre source 坐标
+**修复记录**：e6ca9c3 — fix(frontend): 修复 BUG-23 csvDataReady 误判与西藏边界 GeoJSON 缓存坐标系错位

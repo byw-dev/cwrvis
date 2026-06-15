@@ -64,7 +64,8 @@ function _startProgress() {
   progress.value = 0
   const increment = 90 / (9000 / 100)   // 90% in 9s, tick every 100ms
   _timer = setInterval(() => {
-    if (progress.value < 90) progress.value = Math.min(90, progress.value + increment)
+    progress.value = Math.min(90, progress.value + increment)
+    if (progress.value >= 90) _stopProgress()
   }, 100)
 }
 

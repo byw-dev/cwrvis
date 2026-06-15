@@ -161,7 +161,10 @@ def _compute_means(
                         total = np.where(np.all(np.isnan(arr), axis=0),
                                          np.nan, np.nansum(arr, axis=0))
                         year_totals.append(total)
-                seasonal.append(np.nanmean(np.stack(year_totals), axis=0))
+                if year_totals:
+                    seasonal.append(np.nanmean(np.stack(year_totals), axis=0))
+                else:
+                    seasonal.append(np.full(monthly_arrs[var].shape[1:], np.nan))
             else:
                 # 非 kg：直接 nanmean（等价于两步取 avg）
                 indices = [i for i, (_, mo) in enumerate(sorted_month_keys) if mo in months_set]
