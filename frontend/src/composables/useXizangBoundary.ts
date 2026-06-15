@@ -1,5 +1,5 @@
 import { watch, onUnmounted } from 'vue'
-import type { Map as MaplibreMap } from 'maplibre-gl'
+import type { Map as MaplibreMap, GeoJSONSource } from 'maplibre-gl'
 import { useMap } from './useMap'
 import { useSettingsStore } from '@/stores/settings'
 import { BASEMAPS } from '@/config/basemaps'
@@ -35,14 +35,17 @@ export function useXizangBoundary() {
 
   let active = true  // 实例级标志，防止卸载后 initLayers 异步续体仍操作地图
 
+  function applyCoordSys(gj: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+    return BASEMAPS[settings.basemap].coordSys === 'wgs84' ? shiftCoords(gj, -0.01, 0.005) : gj
+  }
+
   async function loadGeo(id: string): Promise<GeoJSON.FeatureCollection | null> {
     if (geoCache.has(id)) return geoCache.get(id)!
     try {
       const res = await fetch(`${SHAPES_BASE}/${id}.geojson`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      let gj: GeoJSON.FeatureCollection = await res.json()
-      if (BASEMAPS[settings.basemap].coordSys === 'wgs84') gj = shiftCoords(gj, -0.01, 0.005)
-      geoCache.set(id, gj)
+      const gj: GeoJSON.FeatureCollection = await res.json()
+      geoCache.set(id, gj)  // 缓存原始坐标，坐标系偏移在使用时按当前底图计算
       return gj
     } catch { return null }
   }
@@ -88,11 +91,11 @@ export function useXizangBoundary() {
 
     m.addSource('xizang-boundary-outer', {
       type: 'geojson',
-      data: xizangGeo,
+      data: applyCoordSys(xizangGeo),
     })
     m.addSource('xizang-boundary-prefectures', {
       type: 'geojson',
-      data: { type: 'FeatureCollection', features: prefFeatures },
+      data: applyCoordSys({ type: 'FeatureCollection', features: prefFeatures }),
     })
 
     // 地市分界（视觉权重低，先加层在下方）
@@ -128,6 +131,28 @@ export function useXizangBoundary() {
       else m.once('load', () => initLayers(m))
     },
     { immediate: true },
+  )
+
+  // 底图切换时用原始缓存重新计算偏移并更新 source 数据
+  watch(
+    () => settings.basemap,
+    async () => {
+      const m = map.value
+      if (!m || !layersAdded) return
+      const [xizangGeo, ...prefGeos] = await Promise.all([
+        loadGeo('xizang'),
+        ...DISTRICT_IDS.map(id => loadGeo(id)),
+      ])
+      if (!xizangGeo) return
+      const prefFeatures: GeoJSON.Feature[] = []
+      prefGeos.forEach(gj => { if (gj) prefFeatures.push(...gj.features) })
+      try {
+        (m.getSource('xizang-boundary-outer') as GeoJSONSource)?.setData(applyCoordSys(xizangGeo))
+        ;(m.getSource('xizang-boundary-prefectures') as GeoJSONSource)?.setData(
+          applyCoordSys({ type: 'FeatureCollection', features: prefFeatures }),
+        )
+      } catch {}
+    },
   )
 
   // 设置开关实时响应
