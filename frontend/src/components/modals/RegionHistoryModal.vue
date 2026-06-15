@@ -399,9 +399,10 @@ function exportCsv() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const a    = document.createElement('a')
   a.download = `${regionStore.selRegion?.name ?? regionStore.selRegionId}-${tab.label}-云水资源数据-${unitSuffix}.csv`
-  a.href     = URL.createObjectURL(blob)
+  const objUrl = URL.createObjectURL(blob)
+  a.href = objUrl
   a.click()
-  URL.revokeObjectURL(a.href)
+  setTimeout(() => URL.revokeObjectURL(objUrl), 0)
 }
 </script>
 

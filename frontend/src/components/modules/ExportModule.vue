@@ -93,9 +93,10 @@ async function download() {
     const fnMatch = cd.match(/filename="?([^";]+)"?/)
     const a       = document.createElement('a')
     a.download    = fnMatch ? fnMatch[1] : `report-${selRegionId.value}-${selYear.value}.docx`
-    a.href        = URL.createObjectURL(blob)
+    const objUrl  = URL.createObjectURL(blob)
+    a.href        = objUrl
     a.click()
-    URL.revokeObjectURL(a.href)
+    setTimeout(() => URL.revokeObjectURL(objUrl), 0)
   } catch {
     dlError.value = '网络错误，请重试'
   } finally {

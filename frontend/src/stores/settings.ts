@@ -44,7 +44,11 @@ export const useSettingsStore = defineStore('settings', () => {
     readLS<'auto' | 'preset'>('scale_mode', 'auto')
   )
   const fontSize = ref<FontSizeValue>(
-    readLS<FontSizeValue>('font_size', '100%')
+    (() => {
+      const v = readLS<string>('font_size', '100%')
+      const valid = FONT_SIZE_OPTIONS.map(o => o.value) as string[]
+      return valid.includes(v) ? (v as FontSizeValue) : '100%'
+    })()
   )
   // Grouped: { CWR: 'turbo', SP: 'viridis', ... }
   const colormaps = ref<Partial<Record<VarName, ColormapName>>>(
