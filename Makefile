@@ -157,24 +157,21 @@ package: _package-assemble  ## 在线版分发包 → dist/cwrvis-VERSION.tar.gz
 	@echo "==> dist/cwrvis-$(VERSION).tar.gz  ready"
 
 package-offline: _package-assemble  ## 离线版分发包 → dist/cwrvis-VERSION-offline.tar.gz（目标机须有 python3.11）
-	# 导出无 hash 的依赖清单（pip download 不支持带 hash 的格式）
-	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) \
-		> /tmp/cwrvis-req-plain.txt
-
-	# 预取 Linux x86_64 wheel 缓存（Python 3.11，glibc≥2.17 / glibc≥2.28 两套 ABI）
-	uv venv /tmp/cwrvis-pip-env --seed --clear -q
-	/tmp/cwrvis-pip-env/bin/pip install --upgrade pip --quiet
-	/tmp/cwrvis-pip-env/bin/pip download \
+	set -e; \
+	req_tmp=$$(mktemp); pip_tmp=$$(mktemp -d); \
+	trap "rm -rf $$req_tmp $$pip_tmp" EXIT; \
+	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) > $$req_tmp; \
+	uv venv $$pip_tmp --seed --clear -q; \
+	$$pip_tmp/bin/pip install --upgrade pip --quiet; \
+	$$pip_tmp/bin/pip download \
 		--quiet \
 		--python-version 3.11 \
 		--platform manylinux_2_17_x86_64 \
 		--platform manylinux_2_28_x86_64 \
 		--only-binary :all: \
 		--dest $(DIST_DIR)/app/wheels/ \
-		-r /tmp/cwrvis-req-plain.txt
-	rm -rf /tmp/cwrvis-pip-env /tmp/cwrvis-req-plain.txt
-
-	mkdir -p dist
+		-r $$req_tmp; \
+	mkdir -p dist; \
 	cd dist && tar -czf cwrvis-$(VERSION)-offline.tar.gz cwrvis-$(VERSION)/
 	rm -rf $(DIST_DIR)
 	@echo "==> dist/cwrvis-$(VERSION)-offline.tar.gz  ready"

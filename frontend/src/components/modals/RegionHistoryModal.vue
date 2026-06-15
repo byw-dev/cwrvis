@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, shallowRef, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, shallowRef, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, MarkLineComponent, LegendComponent } from 'echarts/components'
@@ -337,12 +337,23 @@ onMounted(async () => {
 })
 
 watch(activeTab, async (newTab, oldTab) => {
+  // 切入年平均：图表 DOM 即将卸载，提前 dispose 实例并清理悬挂 timer
+  if (newTab === 'avg_yearly') {
+    if (outTimer) { clearTimeout(outTimer); outTimer = null }
+    chart.value?.dispose()
+    chart.value = null
+  }
   // 从年平均切回折线 Tab：chartEl 是新元素，必须重建 chart 实例并重注册事件
   if (newTab !== 'avg_yearly' && oldTab === 'avg_yearly') {
     await nextTick()
     if (chartEl.value) initChart(chartEl.value)
   }
   await loadActiveTab()
+})
+
+onUnmounted(() => {
+  if (outTimer) { clearTimeout(outTimer); outTimer = null }
+  chart.value?.dispose()
 })
 watch(() => timeStore.currentIndex, () => { if (!isAvgYearly.value) updateChart() })
 watch(isKgToMm, () => { if (!isAvgYearly.value) updateChart() })
