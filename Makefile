@@ -158,7 +158,8 @@ package: _package-assemble  ## 在线版分发包 → dist/cwrvis-VERSION.tar.gz
 
 package-offline: _package-assemble  ## 离线版分发包 → dist/cwrvis-VERSION-offline.tar.gz（目标机须有 python3.11）
 	set -e; \
-	req_tmp=$$(mktemp /tmp/cwrvis-req.XXXXXX); pip_tmp=$$(mktemp -d /tmp/cwrvis-pip.XXXXXX); \
+	req_tmp=$$(mktemp 2>/dev/null || mktemp -t cwrvis-req.XXXXXX); \
+	pip_tmp=$$(mktemp -d 2>/dev/null || mktemp -d -t cwrvis-pip.XXXXXX); \
 	trap "rm -rf $$req_tmp $$pip_tmp" EXIT; \
 	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) > $$req_tmp; \
 	uv venv $$pip_tmp --seed --clear -q; \
