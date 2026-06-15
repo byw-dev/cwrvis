@@ -10,12 +10,15 @@ import Inspector from '@/components/panels/Inspector.vue'
 import HistoryModal from '@/components/modals/HistoryModal.vue'
 import { isInGridBounds } from '@/utils/grid'
 import { useMetaStore } from '@/stores/meta'
+import { VARS } from '@/config/vars'
 import type { LngLat } from 'maplibre-gl'
 import type { AggMode, VarName } from '@/types'
+import { useXizangBoundary } from '@/composables/useXizangBoundary'
 // fetchFrames 已从 useGridLayer return 中移除，历史数据由 HistoryModal 懒加载
 
 const { map }                         = useMap()
 const { getValueAt, renderTick }      = useGridLayer()
+useXizangBoundary()
 const timeStore = useTimeStore()
 const varStore  = useVarStore()
 const metaStore = useMetaStore()
@@ -161,7 +164,7 @@ onUnmounted(() => {
     :value="hover.value"
     :unit="effectiveUnit"
     :frame-label="frameLabel"
-    :var-name="varStore.selVar"
+    :var-name="VARS[varStore.selVar].display_name"
   />
 
   <!-- Click 圆点标记 -->
@@ -179,7 +182,7 @@ onUnmounted(() => {
       :lat="picked.lat"
       :lon="picked.lon"
       :frame-label="frameLabel"
-      :var-name="varStore.selVar"
+      :var-name="VARS[varStore.selVar].display_name"
       :value="pickedValue"
       :unit="effectiveUnit"
       :show-history="timeStore.mode !== 'avg_yearly'"

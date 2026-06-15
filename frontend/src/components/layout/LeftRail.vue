@@ -13,14 +13,17 @@ function toggle(id: VarGroupId | 'search') {
 }
 
 // Icon SVG paths (22×22 viewBox, stroke, no fill)
+// DEC-018：图标按新分组语义重映射
+// state=状态量(原state图标) advection=平流量(原flux图标)
+// conv=转化(原conv图标) total=总量(原cwr图标) renew=更新期(不变)
 const ICONS: Record<VarGroupId | 'search' | 'export', string> = {
-  cwr:    '<path d="M11 3.5C9 7 4 12 4 15a7 7 0 0 0 14 0C18 12 13 7 11 3.5Z"/>',
-  state:  '<line x1="4" y1="8" x2="18" y2="8"/><line x1="4" y1="11.5" x2="18" y2="11.5"/><line x1="4" y1="15" x2="18" y2="15"/>',
-  flux:   '<path d="M4 9h12"/><path d="M13 5.5l3.5 3.5L13 12.5"/><path d="M18 14H6"/><path d="M9 10.5L5.5 14 9 17.5"/>',
-  conv:   '<path d="M5.5 7.5A6.5 6.5 0 0 1 16.5 8"/><path d="M16.5 6l1 3-3 .5"/><path d="M16.5 14.5A6.5 6.5 0 0 1 5.5 14"/><path d="M5.5 16l-1-3 3-.5"/>',
-  renew:  '<circle cx="11" cy="11" r="7"/><path d="M11 7.5V11l2.5 2"/>',
-  search: '<circle cx="9.5" cy="9.5" r="5.5"/><line x1="13.5" y1="13.5" x2="18" y2="18"/>',
-  export: '<path d="M11 5v11"/><path d="M6.5 13l4.5 5 4.5-5"/><line x1="4" y1="19" x2="18" y2="19"/>',
+  state:     '<line x1="4" y1="8" x2="18" y2="8"/><line x1="4" y1="11.5" x2="18" y2="11.5"/><line x1="4" y1="15" x2="18" y2="15"/>',
+  advection: '<path d="M4 9h12"/><path d="M13 5.5l3.5 3.5L13 12.5"/><path d="M18 14H6"/><path d="M9 10.5L5.5 14 9 17.5"/>',
+  conv:      '<path d="M5.5 7.5A6.5 6.5 0 0 1 16.5 8"/><path d="M16.5 6l1 3-3 .5"/><path d="M16.5 14.5A6.5 6.5 0 0 1 5.5 14"/><path d="M5.5 16l-1-3 3-.5"/>',
+  total:     '<path d="M11 3.5C9 7 4 12 4 15a7 7 0 0 0 14 0C18 12 13 7 11 3.5Z"/>',
+  renew:     '<circle cx="11" cy="11" r="7"/><path d="M11 7.5V11l2.5 2"/>',
+  search:    '<circle cx="9.5" cy="9.5" r="5.5"/><line x1="13.5" y1="13.5" x2="18" y2="18"/>',
+  export:    '<path d="M11 5v11"/><path d="M6.5 13l4.5 5 4.5-5"/><line x1="4" y1="19" x2="18" y2="19"/>',
 }
 
 const GROUPS = VAR_GROUPS   // [{id, label, vars}]

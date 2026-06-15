@@ -5,10 +5,15 @@ export type VarName =
   | 'INh' | 'OTh' | 'MC' | 'GMh' | 'GMv'
   | 'CWR' | 'CEv' | 'PEh' | 'RCv' | 'RCh'
 
-export type VarGroupId = 'cwr' | 'state' | 'flux' | 'conv' | 'renew'
+// DEC-018: 全链路迁移前的临时展示层分组 ID
+// 迁移完成后（F-32/F-33）改回与数据 key 一致的命名
+export type VarGroupId = 'state' | 'advection' | 'conv' | 'total' | 'renew'
 
 export interface VarMeta {
   name: VarName
+  // DEC-018 临时字段：UI 展示用新缩写；数据访问仍用 name（旧 key）
+  // 全链路迁移完成后删除此字段，直接用 name
+  display_name: string
   long_name: string
   units: string
   vmin: number  // natural min for colormap mapping (placeholder, update when data confirmed)
@@ -120,9 +125,9 @@ export interface ModuleDef {
 }
 
 export const MODULE_LIST: ModuleDef[] = [
-  { id: 'grid',   label: '格点数据' },
-  { id: 'region', label: '区域统计' },
-  { id: 'export', label: '数据导出' },
+  { id: 'grid',   label: '空间分布' },
+  { id: 'region', label: '区域评估' },
+  { id: 'export', label: '报告制作' },
 ]
 
 // ─── API response envelope ───────────────────────────────────────────────────

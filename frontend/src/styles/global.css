@@ -14,7 +14,7 @@ html, body, #app {
 }
 
 html {
-  font-size: 16px;
+  font-size: 100%; /* 跟随浏览器默认（通常 16px），由设置覆盖 */
 }
 
 body {

@@ -32,6 +32,19 @@
 - 时序分析模块（Tab 03）实现
 - 移动端适配
 
+## 变量名称全链路迁移（DEC-018 全链路规划，待数据同步后执行）
+
+> 当前已通过临时方案（F-31，`display_name` 字段）解决前端展示层。以下为完整迁移所需的后续任务，条件是甲方提供按新命名生成的源数据。
+
+- **S-09** `[M]` 更新 `netcdf_to_json.py`：新变量 key → 旧 key 映射，重新生成 `static/grid/` 全量 JSON
+- **S-10** `[M]` 更新 `netcdf_to_sqlite.py` / `csv_to_sqlite.py`：列名对齐新命名，重建 `db/stats.db`
+- **B-09** `[S]` 更新 `backend/config.py`（KG_VARS）、`routers/stats.py` 列名引用
+- **F-32** `[S]` 更新 `frontend/src/types/index.ts`：`VarName` 类型改为新缩写联合类型
+- **F-33** `[S]` 删除 `VarMeta.display_name` 临时字段，所有 `display_name` 引用回退为直接用 `name`
+- 触发条件：甲方交付按新命名的 NC/CSV 文件，且 S-09/S-10 验收通过后，按 S→B→F 顺序依次执行
+
+---
+
 ## 技术债 / 优化
 
 - **区域层级关系通用化**（见 DEC-017）：当前区域 ID、父子关系全部硬编码，扩展到多省/多层级时需系统性重构前后端

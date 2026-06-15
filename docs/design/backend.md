@@ -218,13 +218,16 @@ filepath = Path(REPORT_DIR) / region_id / filename
 1. 校验 `region_id` 和 `year` 参数
 2. 确定性拼接文件路径
 3. 路径前缀断言
-4. 检查文件存在，否则返回 404
-5. `FileResponse` 返回，设置 `Content-Disposition: attachment`
+4. 检查文件存在，否则立即返回 404
+5. `await asyncio.sleep(random.uniform(8, 12))`（模拟报告生成耗时，仅成功路径执行）
+6. `FileResponse` 返回，设置 `Content-Disposition: attachment`
+
+> **B-08**：步骤 5 的延迟为前端伪进度条（F-29）提供真实的挂起请求，防止浏览器控制台穿帮。端点须声明为 `async def`。
 
 **响应**：
 - 成功：`200 OK`，`Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`
-- 参数非法：`400`，JSON 错误体
-- 文件不存在：`404`，JSON 错误体
+- 参数非法：`400`，JSON 错误体（立即）
+- 文件不存在：`404`，JSON 错误体（立即）
 
 ---
 

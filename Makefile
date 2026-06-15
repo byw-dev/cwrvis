@@ -22,7 +22,7 @@ DIST_DIR     := dist/cwrvis-$(VERSION)
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 
-.PHONY: all setup data data-grid data-sqlite data-sqlite-csv data-reports colorbars shapes frontend dev package clean help
+.PHONY: all setup data data-grid data-sqlite data-sqlite-csv data-reports colorbars shapes frontend dev package package-offline _package-assemble clean help
 
 # ---------------------------------------------------------------------------- #
 # 默认目标                                                                       #
@@ -110,10 +110,11 @@ dev:  ## 同时启动 FastAPI(:8000) 和 Vite(:5173)，Ctrl+C 一并退出
 # 打包                                                                           #
 # ---------------------------------------------------------------------------- #
 
-package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz（前置：make setup）
+# 公共组装步骤（在线版和离线版共用）
+_package-assemble:
 	@echo "==> Assembling $(DIST_DIR)  (version=$(VERSION))"
 	rm -rf $(DIST_DIR)
-	mkdir -p $(DIST_DIR)/bin $(DIST_DIR)/logs $(DIST_DIR)/conf
+	mkdir -p $(DIST_DIR)/bin $(DIST_DIR)/logs $(DIST_DIR)/conf $(DIST_DIR)/deploy/systemd
 
 	# 生成版本信息（写入 backend/build_info.json，rsync 时一并打入包）
 	VERSION=$(VERSION) bash scripts/gen_build_info.sh
@@ -126,27 +127,9 @@ package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz（前置
 		--exclude='*.pyo' \
 		backend/ $(DIST_DIR)/app/
 
-	# 导出锁定依赖清单（两份）：
-	#   requirements.txt     带 hash，供目标机离线安装时完整性校验
-	#   /tmp/req-plain.txt   无 hash，供 pip download 跨平台解析（hash 会干扰）
+	# 导出锁定依赖清单（带 hash，完整性校验）
 	(cd backend && uv export --frozen --no-dev --format requirements-txt) \
 		> $(DIST_DIR)/app/requirements.txt
-	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) \
-		> /tmp/cwrvis-req-plain.txt
-
-	# 预取 Linux x86_64 wheel 缓存（支持在 macOS 构建、Linux 离线运行）
-	# 目标平台：glibc≥2.28（Ubuntu 20.04+）
-	uv venv /tmp/cwrvis-pip-env --seed --clear -q
-	/tmp/cwrvis-pip-env/bin/pip install --upgrade pip --quiet
-	/tmp/cwrvis-pip-env/bin/pip download \
-		--quiet \
-		--python-version 3.11 \
-		--platform manylinux_2_17_x86_64 \
-		--platform manylinux_2_28_x86_64 \
-		--only-binary :all: \
-		--dest $(DIST_DIR)/app/wheels/ \
-		-r /tmp/cwrvis-req-plain.txt
-	rm -rf /tmp/cwrvis-pip-env /tmp/cwrvis-req-plain.txt
 
 	# 生成的静态资产 → static/
 	rsync -a static/ $(DIST_DIR)/static/
@@ -155,18 +138,44 @@ package:  ## 组装分发目录并打包 → dist/cwrvis-VERSION.tar.gz（前置
 	mkdir -p $(DIST_DIR)/db
 	cp db/stats.db $(DIST_DIR)/db/stats.db
 
-	# 配置 → conf/（example 作为初始模板，若已有 config.env 则覆盖）
-	cp conf/config.env.example $(DIST_DIR)/conf/config.env
-	[ -f conf/config.env ] && cp conf/config.env $(DIST_DIR)/conf/config.env || true
+	# 配置模板 → conf/（install.sh 安装时处理首次/升级逻辑）
+	cp conf/config.env.example $(DIST_DIR)/conf/
 
 	# 运行脚本 → bin/
 	cp bin/start.sh bin/stop.sh $(DIST_DIR)/bin/
 	chmod +x $(DIST_DIR)/bin/start.sh $(DIST_DIR)/bin/stop.sh
 
-	# 打压缩包
+	# 部署脚本 + systemd service → 包根 + deploy/systemd/
+	cp deploy/install.sh $(DIST_DIR)/install.sh
+	chmod +x $(DIST_DIR)/install.sh
+	cp deploy/systemd/cwrvis.service $(DIST_DIR)/deploy/systemd/
+
+package: _package-assemble  ## 在线版分发包 → dist/cwrvis-VERSION.tar.gz（目标机须有 uv）
 	mkdir -p dist
 	cd dist && tar -czf cwrvis-$(VERSION).tar.gz cwrvis-$(VERSION)/
+	rm -rf $(DIST_DIR)
 	@echo "==> dist/cwrvis-$(VERSION).tar.gz  ready"
+
+package-offline: _package-assemble  ## 离线版分发包 → dist/cwrvis-VERSION-offline.tar.gz（目标机须有 python3.11）
+	set -e; \
+	req_tmp=$$(mktemp 2>/dev/null || mktemp -t cwrvis-req.XXXXXX); \
+	pip_tmp=$$(mktemp -d 2>/dev/null || mktemp -d -t cwrvis-pip.XXXXXX); \
+	trap "rm -rf $$req_tmp $$pip_tmp" EXIT; \
+	(cd backend && uv export --frozen --no-dev --format requirements-txt --no-hashes) > $$req_tmp; \
+	uv venv $$pip_tmp --seed --clear -q; \
+	$$pip_tmp/bin/pip install --upgrade pip --quiet; \
+	$$pip_tmp/bin/pip download \
+		--quiet \
+		--python-version 3.11 \
+		--platform manylinux_2_17_x86_64 \
+		--platform manylinux_2_28_x86_64 \
+		--only-binary :all: \
+		--dest $(DIST_DIR)/app/wheels/ \
+		-r $$req_tmp; \
+	mkdir -p dist; \
+	cd dist && tar -czf cwrvis-$(VERSION)-offline.tar.gz cwrvis-$(VERSION)/
+	rm -rf $(DIST_DIR)
+	@echo "==> dist/cwrvis-$(VERSION)-offline.tar.gz  ready"
 
 # ---------------------------------------------------------------------------- #
 # 清理                                                                           #
@@ -205,8 +214,10 @@ help:  ## 显示此帮助
 	@echo "  make dev                     FastAPI:8000 + Vite:5173（Ctrl+C 同时停止）"
 	@echo ""
 	@echo "Distribution:"
-	@echo "  make package                 打包  →  dist/cwrvis-$(VERSION).tar.gz"
+	@echo "  make package                 在线版  →  dist/cwrvis-$(VERSION).tar.gz（目标机须有 uv）"
+	@echo "  make package-offline         离线版  →  dist/cwrvis-$(VERSION)-offline.tar.gz（目标机须有 python3.11）"
 	@echo "  make package VERSION=1.0.0"
+	@echo "  make package-offline VERSION=1.0.0"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean                   删除全部生成文件"

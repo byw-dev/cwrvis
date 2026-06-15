@@ -1,3 +1,5 @@
+import asyncio
+import random
 import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
@@ -47,7 +49,7 @@ def get_report_meta():
 
 
 @router.get("/report/download")
-def download_report(region_id: str, year: str):
+async def download_report(region_id: str, year: str):
     # 1. 枚举白名单校验
     if region_id not in VALID_REGION_IDS:
         raise HTTPException(400, f"非法 region_id：{region_id!r}")
@@ -71,6 +73,8 @@ def download_report(region_id: str, year: str):
 
     if not filepath.is_file():
         raise HTTPException(404, f"报告文件不存在：{region_id}/{filename}")
+
+    await asyncio.sleep(random.uniform(8, 12))
 
     return FileResponse(
         path=filepath,

@@ -72,15 +72,23 @@ make data              # 一次性生成 db/stats.db + static/grid/ + static/sha
 
 ## 生产部署
 
+提供在线和离线两种分发包：
+
 ```bash
-# 构建机打包（产物含离线 wheel 缓存，支持目标机无网安装）
+# 在线版（目标机须已安装 uv）
 make package VERSION=1.0.0
 # → dist/cwrvis-1.0.0.tar.gz
 
-# 目标机（Linux x86_64）
-tar xf cwrvis-1.0.0.tar.gz -C /opt
-cd /opt/cwrvis-1.0.0
-bin/start.sh
+# 离线版（目标机须有 python3.11，无需网络）
+make package-offline VERSION=1.0.0
+# → dist/cwrvis-1.0.0-offline.tar.gz
+```
+
+上传至目标机后，解压并运行内置的安装脚本（自动创建用户、安装依赖、注册 systemd）：
+
+```bash
+tar xf cwrvis-1.0.0.tar.gz
+sudo cwrvis-1.0.0/install.sh
 ```
 
 详细部署步骤、systemd 配置、环境变量说明见 [`docs/design/deployment.md`](docs/design/deployment.md)。
