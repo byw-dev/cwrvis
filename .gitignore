@@ -84,6 +84,9 @@ data/nc/
 # 甲方预生成报告文档（体积大，不入库；需手动放置后运行 make data-reports）
 data/docx/
 
+# 专题图图片（外部管理，不入库；部署后由 IMAGE_DIR 指向）
+data/images/
+
 # 外部提供的预计算 CSV 数据（不入库）
 data/csv/
 
@@ -105,3 +108,6 @@ db/
 # 分发压缩包
 dist/
 backend/build_info.json
+
+# 本地环境配置（含真实路径/密钥，不入库；模板见 conf/config.env.example）
+conf/config.env

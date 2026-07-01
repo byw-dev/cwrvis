@@ -17,7 +17,15 @@ CSV_DIR      ?= data/csv
 SHAPE_DIR    ?= data/shapes
 METHOD       ?= area_weighted
 NODE_VERSION := $(shell cat .nvmrc 2>/dev/null || echo lts/*)
-DIST_DIR     := dist/cwrvis-$(VERSION)
+
+# 从当前分支名自动推导变体（custom/xizang → xizang；其他分支 → 空）
+_BRANCH  := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)
+_VARIANT := $(shell echo "$(_BRANCH)" | sed -n 's|^custom/||p')
+
+# SVC_NAME：有变体时 cwrvis-{variant}，否则 cwrvis（master 默认）
+SVC_NAME ?= $(if $(_VARIANT),cwrvis-$(_VARIANT),cwrvis)
+PKG_NAME ?= $(SVC_NAME)
+DIST_DIR := dist/$(PKG_NAME)-$(VERSION)
 
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
@@ -131,8 +139,8 @@ _package-assemble:
 	(cd backend && uv export --frozen --no-dev --format requirements-txt) \
 		> $(DIST_DIR)/app/requirements.txt
 
-	# 生成的静态资产 → static/
-	rsync -a static/ $(DIST_DIR)/static/
+	# 生成的静态资产 → static/（images/ reports/ 由外部管理，不打入包）
+	rsync -a --exclude='images/' --exclude='reports/' static/ $(DIST_DIR)/static/
 
 	# 数据库 → db/
 	mkdir -p $(DIST_DIR)/db
@@ -141,20 +149,25 @@ _package-assemble:
 	# 配置模板 → conf/（install.sh 安装时处理首次/升级逻辑）
 	cp conf/config.env.example $(DIST_DIR)/conf/
 
-	# 运行脚本 → bin/
-	cp bin/start.sh bin/stop.sh $(DIST_DIR)/bin/
+	# 运行脚本 → bin/（stop.sh 渲染服务名；start.sh 无需修改）
+	cp bin/start.sh $(DIST_DIR)/bin/start.sh
+	sed 's/cwrvis/$(SVC_NAME)/g' bin/stop.sh > $(DIST_DIR)/bin/stop.sh
 	chmod +x $(DIST_DIR)/bin/start.sh $(DIST_DIR)/bin/stop.sh
 
-	# 部署脚本 + systemd service → 包根 + deploy/systemd/
-	cp deploy/install.sh $(DIST_DIR)/install.sh
+	# 部署脚本（渲染 SVC_NAME 常量）→ 包根
+	sed 's/^SVC_NAME="cwrvis"/SVC_NAME="$(SVC_NAME)"/' \
+		deploy/install.sh > $(DIST_DIR)/install.sh
 	chmod +x $(DIST_DIR)/install.sh
-	cp deploy/systemd/cwrvis.service $(DIST_DIR)/deploy/systemd/
 
-package: _package-assemble  ## 在线版分发包 → dist/cwrvis-VERSION.tar.gz（目标机须有 uv）
+	# systemd service（渲染路径和描述，以 SVC_NAME 命名）→ deploy/systemd/
+	sed 's|/opt/cwrvis|/opt/$(SVC_NAME)|g; s|Description=cwrvis |Description=$(SVC_NAME) |g' \
+		deploy/systemd/cwrvis.service > $(DIST_DIR)/deploy/systemd/$(SVC_NAME).service
+
+package: _package-assemble  ## 在线版分发包 → dist/PKG_NAME-VERSION.tar.gz（目标机须有 uv）
 	mkdir -p dist
-	cd dist && tar -czf cwrvis-$(VERSION).tar.gz cwrvis-$(VERSION)/
+	cd dist && COPYFILE_DISABLE=1 tar -czf $(PKG_NAME)-$(VERSION).tar.gz $(PKG_NAME)-$(VERSION)/
 	rm -rf $(DIST_DIR)
-	@echo "==> dist/cwrvis-$(VERSION).tar.gz  ready"
+	@echo "==> dist/$(PKG_NAME)-$(VERSION).tar.gz  ready"
 
 package-offline: _package-assemble  ## 离线版分发包 → dist/cwrvis-VERSION-offline.tar.gz（目标机须有 python3.11）
 	set -e; \
@@ -173,9 +186,9 @@ package-offline: _package-assemble  ## 离线版分发包 → dist/cwrvis-VERSIO
 		--dest $(DIST_DIR)/app/wheels/ \
 		-r $$req_tmp; \
 	mkdir -p dist; \
-	cd dist && tar -czf cwrvis-$(VERSION)-offline.tar.gz cwrvis-$(VERSION)/
+	cd dist && COPYFILE_DISABLE=1 tar -czf $(PKG_NAME)-$(VERSION)-offline.tar.gz $(PKG_NAME)-$(VERSION)/
 	rm -rf $(DIST_DIR)
-	@echo "==> dist/cwrvis-$(VERSION)-offline.tar.gz  ready"
+	@echo "==> dist/$(PKG_NAME)-$(VERSION)-offline.tar.gz  ready"
 
 # ---------------------------------------------------------------------------- #
 # 清理                                                                           #
@@ -214,10 +227,11 @@ help:  ## 显示此帮助
 	@echo "  make dev                     FastAPI:8000 + Vite:5173（Ctrl+C 同时停止）"
 	@echo ""
 	@echo "Distribution:"
-	@echo "  make package                 在线版  →  dist/cwrvis-$(VERSION).tar.gz（目标机须有 uv）"
-	@echo "  make package-offline         离线版  →  dist/cwrvis-$(VERSION)-offline.tar.gz（目标机须有 python3.11）"
-	@echo "  make package VERSION=1.0.0"
-	@echo "  make package-offline VERSION=1.0.0"
+	@echo "  make package                 在线版（分支名自动推导变体）"
+	@echo "    master 分支    → dist/cwrvis-VERSION.tar.gz"
+	@echo "    custom/foo 分支 → dist/cwrvis-foo-VERSION.tar.gz"
+	@echo "  make package VERSION=1.1.0"
+	@echo "  make package-offline VERSION=1.1.0"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean                   删除全部生成文件"
