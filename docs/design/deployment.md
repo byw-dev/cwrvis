@@ -193,7 +193,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 首次部署
 
 ```bash
-# 1. 构建机打包
+# 1. 构建机打包（make package 不自动编译前端，须先手动执行）
+make frontend
 make package VERSION=1.0.0          # 在线版
 make package-offline VERSION=1.0.0  # 离线版
 
@@ -218,9 +219,10 @@ curl http://localhost:8000/api/v1/health
 ### 升级部署
 
 ```bash
-# 1. 构建新版本包并上传
+# 1. 构建新版本包并上传（同样须先编译前端）
+make frontend
 make package VERSION=1.1.0
-scp dist/cwrvis-1.1.0.tar.gz user@server:~
+scp dist/cwrvis-1.1.0.tar.gz user@server:/tmp/
 
 # 2. 解压并运行安装脚本（自动停服、替换、重启）
 ssh user@server
