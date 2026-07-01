@@ -4,6 +4,21 @@
 
 ---
 
+## BUG-34 · 报告软链接文件可被扫描但无法下载
+
+**发现时间**：2026-06-16
+**严重程度**：Minor
+**重现步骤**：
+1. 将 `static/reports/{region_id}/` 下的 `.docx` 设为指向该目录外部的软链接
+2. 重启服务，`/report/meta` 接口正常返回该报告条目（前端可见）
+3. 前端点击下载，返回 400/404
+**期望行为**：软链接文件可正常下载
+**实际行为**：`download_report` 中 `filepath.resolve()` 将软链接展开为真实路径，真实路径不以 `report_root` 开头，被路径前缀断言拦截（`backend/routers/report.py` 第 71 行）
+**相关文件**：`backend/routers/report.py`（`download_report` 函数，第 67–72 行）
+**修复思路**：路径穿越检查改为在 `resolve()` 之前针对未解析路径执行，`resolve()` 移至检查之后；`region_id` 白名单 + `filename` 确定性拼接已保证无自由字符串注入，安全性不受影响
+
+---
+
 ## BUG-18 · `bilinearInterp` 坐标映射与 Canvas 渲染不一致
 
 **发现时间**：2026-05-16
