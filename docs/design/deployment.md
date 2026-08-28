@@ -49,6 +49,57 @@ cwrvis-{version}/
 
 ---
 
+## 多变体共存部署
+
+同一台主机可以并行部署多个变体（`master` 基线版 + 各 `custom/*` 定制版）。Makefile
+从分支名 `custom/{variant}` 自动推导 `SVC_NAME` / `PKG_NAME`，因此各变体的安装目录、
+systemd 单元、分发包名天然隔离：
+
+```
+/opt/cwrvis            -> /opt/cwrvis-{ver}            cwrvis.service
+/opt/cwrvis-{variant}  -> /opt/cwrvis-{variant}-{ver}  cwrvis-{variant}.service
+```
+
+### 外部资产目录约定
+
+体积大或需独立于发布包更新的资产放在 `/data/cwrvis/` 下，按变体加后缀区分：
+
+```
+/data/cwrvis/
+├── db/              基线版的 stats.db
+├── db-{variant}/    某定制版的 stats.db
+├── reports/         基线版报告
+├── reports-{variant}/
+└── images-{variant}/  （若该变体启用专题图模块）
+```
+
+各变体的 `conf/config.env` 用绝对路径指向自己的那一份。
+
+> ⚠️ **数据集不同的变体必须使用各自独立的 `DB_PATH`。** 若两个变体的区域集合或
+> 格点范围不同，共用同一个 `stats.db` 会让其中一个读到完全错误的数据。反之，
+> 数据集相同的变体（如基线版与仅做界面定制的版本）共用一份是合理的。
+
+### 哪些配置项真正生效
+
+| 配置项 | 是否生效 | 读取处 |
+|--------|---------|--------|
+| `DB_PATH` | ✅ | `database.py` |
+| `STATIC_ROOT` | ✅ | `main.py`，据此挂载 `/grid`、`/shapes`、`/` |
+| `REPORT_DIR` | ✅ | `routers/report.py` |
+| `PORT` / `FORWARDED_ALLOW_IPS` | ✅ | `bin/start.sh` |
+| `GRID_DIR` / `SHAPES_DIR` | ❌ **死配置** | 无任何代码读取 |
+
+`GRID_DIR` 容易误导 —— 把它指向 `/data/cwrvis/grid` 不会改变 `/grid` 的服务来源，
+格点 JSON 始终随发布包走 `STATIC_ROOT/grid`。要更换格点数据只能重新打包部署。
+
+### 升级时的注意事项
+
+`install.sh` 会暂存并还原 `conf/` 下的用户文件，因此 `config.env` 跨版本保留。
+但**它不会碰 `/data/cwrvis/` 下的任何东西** —— 若本次升级同时更新了 `stats.db`，
+必须手工把包内的 `db/stats.db` 复制到 `DB_PATH` 指向的位置，否则新包配旧库。
+
+---
+
 ## FastAPI 静态文件挂载策略
 
 ```python
