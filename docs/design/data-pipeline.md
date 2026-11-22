@@ -215,14 +215,16 @@ vals = frame_2d[mask & ~np.isnan(frame_2d)]
 value = np.sum(vals) if var_unit == 'kg' else np.mean(vals)
 ```
 
-**区域面积计算（`region_areas` 表）**
+**kg→mm 换算基准面积（`region_areas` 表）**
 
-每种聚合方法在 `prepare()` 阶段一并计算区域有效面积，写入 `region_areas` 表：
+`region_areas.area_m2` 只有一个用途：前端把 kg 值换算成 mm（水深）。因此它必须与该聚合方法 `aggregate()` 的**量纲配套**，两种方法下含义并不相同：
 
-| 方法 | area_m2 计算方式 |
-|------|----------------|
-| `AreaWeightedMean` | `Σ(dxy[i][j] × overlap_ratio[i][j])`，对所有与区域有面积交叉的格点加权求和 |
-| `PointInBoundary` | `Σ(dxy[i][j])` for `mask[i][j] == True`，对中心点在边界内的格点求和 |
+| 方法 | `aggregate()` 量纲 | `mm_divisor_m2()` 计算方式 |
+|------|------------------|--------------------------|
+| `AreaWeightedMean` | kg / 格点（逐格点加权均值） | `Σ(dxy × w) / Σw` —— **有效格点面积** |
+| `PointInBoundary` | kg / 区域（区域内格点求和） | `Σ(dxy[i][j])` for `mask == True` —— **区域面积** |
+
+> ⚠️ 两者混用会得到荒谬结果。此前 `AreaWeightedMean` 错用区域总面积作除数，面积远小于一个 1° 格点的区域会算出十万毫米级的年降水。因为 `make data` 默认走路径 B（`data-sqlite-csv`），该缺陷长期未暴露 —— 只要执行 `make data-sqlite` 就会触发。
 
 `dxy` 数组从 netcdf 文件中读取（与格点 JSON 导出时使用的同一数组，单位 m²）。
 

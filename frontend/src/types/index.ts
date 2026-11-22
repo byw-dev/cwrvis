@@ -39,7 +39,10 @@ export interface RegionMeta {
   region_id: RegionId
   name: string
   level: RegionLevel
-  area_m2?: number | null  // 区域有效面积（m²），由后端 region_areas 表提供，供 kg→mm 换算
+  // kg→mm 换算除数（m²），由后端 region_areas 表提供。
+  // 注意它不一定等于区域面积：area_weighted 方法下统计值是逐格点加权均值，
+  // 除数是有效格点面积（详见 scripts/netcdf_to_sqlite.py 模块 docstring）。
+  area_m2?: number | null
 }
 
 // ─── Aggregation mode & timeline ─────────────────────────────────────────────

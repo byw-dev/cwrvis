@@ -10,13 +10,21 @@ netcdf × shape → SQLite 区域统计数据库。
 输出：
   {db_path}：SQLite 宽表
     region_stats(region_id, granularity, year, month, SP, aveMv, ..., RCh)
-    region_areas(region_id, area_m2)  ← 区域有效面积，供前端 kg→mm 换算
+    region_areas(region_id, area_m2)  ← kg→mm 换算基准面积（含义随 --method 而变，见下）
   仅存 granularity IN ('year','month') 的原始统计值；
   mean_all / mean_month / mean_season 由后端查询时用 SQL 实时计算。
 
 空间聚合方法（--method）：
   area_weighted    （默认）面积加权均值：格点单元与区域多边形的重叠面积为权重
   point_in_boundary         中心点在边界内的格点：kg var → SUM，其余 → 算术平均
+
+关于 region_areas.area_m2 —— 它只有一个用途：前端把 kg 值换算成 mm（水深）。
+因此它必须与 aggregate() 的量纲配套，两种方法下含义不同：
+  area_weighted     统计值是「逐格点加权均值」，量纲是 kg/格点
+                    → 除数取 **有效格点面积** Σ(dxy·w)/Σw
+  point_in_boundary kg 变量统计值是区域内格点求和，量纲是 kg/区域
+                    → 除数取 **区域面积** Σ dxy[mask]
+两者混用会得到荒谬结果：面积远小于一个 1° 格点的区域，年降水会算出十万毫米级。
 
 用法：
   uv run python scripts/netcdf_to_sqlite.py
@@ -77,7 +85,8 @@ class RegionAggregator(ABC):
     空间聚合策略接口。
     prepare() 每个区域调用一次（缓存权重/掩码，后续逐帧复用）。
     aggregate() 每帧每 var 调用一次，返回 float；区域内无有效格点时返回 None。
-    area_m2()  须在 prepare() 之后调用，返回区域有效面积（m²）。
+    mm_divisor_m2() 须在 prepare() 之后调用，返回 kg→mm 换算的除数（m²），
+                    须与本策略 aggregate() 的量纲配套。
     """
 
     @abstractmethod
@@ -92,8 +101,8 @@ class RegionAggregator(ABC):
     def aggregate(self, frame_2d: np.ndarray, var_name: str) -> float | None: ...
 
     @abstractmethod
-    def area_m2(self, dxy: np.ndarray) -> float:
-        """区域有效面积（m²），须在 prepare() 之后调用。"""
+    def mm_divisor_m2(self, dxy: np.ndarray) -> float:
+        """kg→mm 换算除数（m²），须在 prepare() 之后调用。"""
         ...
 
 
@@ -120,9 +129,14 @@ class AreaWeightedMean(RegionAggregator):
             return None
         return float(np.nansum(frame_2d * w) / total_w)
 
-    def area_m2(self, dxy: np.ndarray) -> float:
+    def mm_divisor_m2(self, dxy: np.ndarray) -> float:
+        # aggregate() 返回的是逐格点加权均值（kg/格点），因此除数取加权平均的
+        # 格点面积 Σ(dxy·w)/Σw，而非区域总面积 —— 后者会让小区域的 mm 值虚高。
         # _w[i,j] 为格点单元与区域的重叠面积（地理度²，单位格点面积=1.0，即重叠比例）
-        return float(np.nansum(dxy * self._w))
+        total_w = float(self._w.sum())
+        if total_w == 0.0:
+            return float("nan")
+        return float(np.nansum(dxy * self._w) / total_w)
 
 
 class PointInBoundary(RegionAggregator):
@@ -146,7 +160,8 @@ class PointInBoundary(RegionAggregator):
             return None
         return float(np.sum(vals) if var_name in KG_VARS else np.mean(vals))
 
-    def area_m2(self, dxy: np.ndarray) -> float:
+    def mm_divisor_m2(self, dxy: np.ndarray) -> float:
+        # kg 变量 aggregate() 已在区域内求和（kg/区域），除数即区域面积
         return float(np.nansum(dxy[self._mask]))
 
 
@@ -280,6 +295,7 @@ CREATE INDEX idx_region_gran
     ON region_stats (region_id, granularity, year, month);
 CREATE TABLE region_areas (
     region_id TEXT PRIMARY KEY,
+    -- kg→mm 换算基准面积，含义随聚合方法而变（见模块 docstring）
     area_m2   REAL NOT NULL
 );
 """
@@ -372,7 +388,7 @@ def main() -> None:
     for region_id, region_geom in regions:
         print(f"  {region_id} — prepare...", end=" ", flush=True)
         agg.prepare(region_geom, lats, lons)
-        areas[region_id] = agg.area_m2(dxy)
+        areas[region_id] = agg.mm_divisor_m2(dxy)
         print("aggregate...", end=" ", flush=True)
 
         rows: list[dict] = []
