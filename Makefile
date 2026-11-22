@@ -12,9 +12,12 @@
 # ==============================================================================
 
 VERSION      ?= 0.1.0
-NC_DIR       ?= data/nc
+# 原始数据按分支变体分目录：data/full/nc（master）、data/xizang/nc、data/huanan/nc
+# 并存于同一工作树，可来回切分支重新构建任一版本。
+NC_DIR       ?= data/full/nc
 CSV_DIR      ?= data/csv
 SHAPE_DIR    ?= data/shapes
+COLORBAR_DIR ?= data/colorbars
 METHOD       ?= area_weighted
 NODE_VERSION := $(shell cat .nvmrc 2>/dev/null || echo lts/*)
 
@@ -30,7 +33,7 @@ DIST_DIR := dist/$(PKG_NAME)-$(VERSION)
 # 在非交互式 shell 中初始化 nvm 并切换到项目指定版本
 NVM_INIT := . $${NVM_DIR:-$$HOME/.nvm}/nvm.sh && nvm use $(NODE_VERSION)
 
-.PHONY: all setup data data-grid data-sqlite data-sqlite-csv data-reports colorbars shapes frontend dev package package-offline _package-assemble clean help
+.PHONY: all setup data nc-arrange data-grid data-sqlite data-sqlite-csv data-reports colorbar-stats colorbars shapes frontend dev package package-offline _package-assemble clean help
 
 # ---------------------------------------------------------------------------- #
 # 默认目标                                                                       #
@@ -57,8 +60,21 @@ setup:  ## 初始化所有开发环境（首次 clone 后运行一次即可）
 
 data: data-grid data-sqlite-csv shapes data-reports  ## 全部离线数据（grid + sqlite-csv + shapes + reports）
 
-colorbars:  ## data/colorbars/ CSV → frontend/src/config/colorbars.ts（色卡预设量程）
-	uv run --project scripts python scripts/generate_colorbars.py
+nc-arrange:  ## 将甲方按年份分目录的 nc 归一化为 yearly/ + monthly/（幂等，可重跑）
+	mkdir -p $(NC_DIR)/yearly $(NC_DIR)/monthly
+	find $(NC_DIR) -mindepth 2 -name 'ResultGrid_Y_*.nc' -not -path '*/yearly/*'  -exec mv {} $(NC_DIR)/yearly/  \;
+	find $(NC_DIR) -mindepth 2 -name 'ResultGrid_M_*.nc' -not -path '*/monthly/*' -exec mv {} $(NC_DIR)/monthly/ \;
+	find $(NC_DIR) -mindepth 1 -type d -empty \
+		! -path "$(NC_DIR)/yearly" ! -path "$(NC_DIR)/monthly" -delete
+	@echo "==> yearly: $$(find $(NC_DIR)/yearly -maxdepth 1 -name '*.nc' | wc -l | tr -d ' ') 个   monthly: $$(find $(NC_DIR)/monthly -maxdepth 1 -name '*.nc' | wc -l | tr -d ' ') 个"
+
+colorbar-stats: data-grid  ## static/grid/ → COLORBAR_DIR 下 4 个色卡量程统计 CSV
+	uv run --project scripts python scripts/grid_colorbar_stats.py \
+		--grid-dir static/grid \
+		--out-dir $(COLORBAR_DIR)
+
+colorbars:  ## 色卡量程 CSV → frontend/src/config/colorbars.ts（色卡预设量程）
+	uv run --project scripts python scripts/generate_colorbars.py --csv-dir $(COLORBAR_DIR)
 	@echo "==> 请将生成的 colorbars.ts 一并 commit 到 git"
 
 data-reports:  ## 报告文档 → static/reports/（保留子目录，需先准备 data/docx/）
@@ -212,10 +228,12 @@ help:  ## 显示此帮助
 	@echo ""
 	@echo "Data generation:"
 	@echo "  make data                    全部离线数据（grid + sqlite-csv + shapes + reports）"
+	@echo "  make nc-arrange              甲方 nc 目录 →  $(NC_DIR)/yearly + monthly（幂等）"
 	@echo "  make data-grid               格点 JSON           →  static/grid/"
 	@echo "  make data-sqlite-csv         路径 B: CSV 导入    →  db/stats.db（默认）"
 	@echo "  make data-sqlite             路径 A: netcdf 聚合 →  db/stats.db"
 	@echo "  make data-sqlite METHOD=point_in_boundary"
+	@echo "  make colorbar-stats          格点统计 →  $(COLORBAR_DIR)/*.csv"
 	@echo "  make colorbars               CSV 量程 → frontend/src/config/colorbars.ts"
 	@echo "  make data-reports            报告文档复制     →  static/reports/"
 	@echo "  make shapes                  GeoJSON 重命名   →  static/shapes/"

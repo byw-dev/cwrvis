@@ -5,6 +5,7 @@ import { useVarStore } from '@/stores/var'
 import { useRegionStore } from '@/stores/region'
 import { VARS, VAR_GROUPS } from '@/config/vars'
 import { SEASONS, YEAR_MIN, YEAR_MAX, fmtMonth } from '@/config/constants'
+import { OVERALL_REGION_ID, OVERALL_LABEL } from '@/config/regions'
 import type { ModuleId, AggMode } from '@/types'
 
 const props = defineProps<{ activeModule: ModuleId }>()
@@ -33,7 +34,7 @@ const frameCount = computed(() => {
 })
 
 const selRegionName = computed(() =>
-  regionStore.selRegion?.name ?? '西藏自治区（全区）'
+  regionStore.selRegion?.name ?? OVERALL_LABEL
 )
 </script>
 
@@ -103,15 +104,15 @@ const selRegionName = computed(() =>
           <div v-if="regionOpen" class="dropdown region-dropdown">
             <button
               class="dropdown-item"
-              :class="{ active: regionStore.selRegionId === 'xizang' }"
-              @click="regionStore.selectRegion('xizang'); regionOpen = false"
+              :class="{ active: regionStore.selRegionId === OVERALL_REGION_ID }"
+              @click="regionStore.selectRegion(OVERALL_REGION_ID); regionOpen = false"
             >
-              <span class="region-dot" :class="{ on: regionStore.selRegionId === 'xizang' }">●</span>
-              西藏自治区（全区）
+              <span class="region-dot" :class="{ on: regionStore.selRegionId === OVERALL_REGION_ID }">●</span>
+              {{ OVERALL_LABEL }}
             </button>
             <div class="dropdown-divider" />
             <button
-              v-for="r in regionStore.regions.filter(r => r.level === 'prefecture')"
+              v-for="r in regionStore.regions.filter(r => r.region_id !== OVERALL_REGION_ID)"
               :key="r.region_id"
               class="dropdown-item region-item"
               :class="{ active: regionStore.selRegionId === r.region_id }"

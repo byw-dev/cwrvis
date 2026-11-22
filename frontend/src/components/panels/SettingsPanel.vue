@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useSettingsStore, FONT_SIZE_OPTIONS } from '@/stores/settings'
 import { BASEMAP_LIST } from '@/config/basemaps'
+import { BOUNDARY_HINT } from '@/config/regions'
 
 defineEmits<{ close: [] }>()
 
@@ -46,15 +47,15 @@ function fmtTime(iso: string): string {
         <!-- Spatial distribution -->
         <div class="settings-section">
           <div class="section-label">空间分布</div>
-          <label class="radio-item" :class="{ active: settings.showXizangBoundary }">
+          <label class="radio-item" :class="{ active: settings.showAdminBoundary }">
             <input
               type="checkbox"
-              :checked="settings.showXizangBoundary"
-              @change="settings.showXizangBoundary = ($event.target as HTMLInputElement).checked"
+              :checked="settings.showAdminBoundary"
+              @change="settings.showAdminBoundary = ($event.target as HTMLInputElement).checked"
             />
             显示行政边界
           </label>
-          <div class="section-hint">西藏全区外轮廓 + 7 个地市分界线</div>
+          <div class="section-hint">{{ BOUNDARY_HINT }}</div>
         </div>
 
         <!-- Basemap -->

@@ -29,17 +29,21 @@ export interface VarGroup {
 
 // ─── Region ──────────────────────────────────────────────────────────────────
 
-export type RegionId =
-  | 'xizang' | 'lasa' | 'rikaze' | 'shannan'
-  | 'linzhi' | 'changdu' | 'naqu' | 'ali'
+// RegionId 在 config/regions.ts 定义（那里是区域集合的唯一真相源）。
+// re-export 不产生本地绑定，下面 RegionMeta 要用，所以同时 import。
+import type { RegionId } from '@/config/regions'
+export type { RegionId }
 
-export type RegionLevel = 'province' | 'prefecture'
+export type RegionLevel = 'region' | 'province' | 'prefecture'
 
 export interface RegionMeta {
   region_id: RegionId
   name: string
   level: RegionLevel
-  area_m2?: number | null  // 区域有效面积（m²），由后端 region_areas 表提供，供 kg→mm 换算
+  // kg→mm 换算除数（m²），由后端 region_areas 表提供。
+  // 注意它不一定等于区域面积：area_weighted 方法下统计值是逐格点加权均值，
+  // 除数是有效格点面积（详见 scripts/netcdf_to_sqlite.py 模块 docstring）。
+  area_m2?: number | null
 }
 
 // ─── Aggregation mode & timeline ─────────────────────────────────────────────

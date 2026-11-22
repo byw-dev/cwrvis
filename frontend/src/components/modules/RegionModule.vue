@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRegionLayer, hoverInfo } from '@/composables/useRegionLayer'
 import { useGridLayer, isKgToMm } from '@/composables/useGridLayer'
 import { useRegionStore } from '@/stores/region'
+import { OVERALL_REGION_ID } from '@/config/regions'
 import { useTimeStore } from '@/stores/time'
 import { useVarStore } from '@/stores/var'
 import { VARS } from '@/config/vars'
@@ -88,7 +89,7 @@ const frameLabel = computed(() => {
       :var-name="VARS[varStore.selVar].display_name"
       :value="currentValue"
       :unit="currentUnit"
-      @clear="regionStore.selectRegion('xizang')"
+      @clear="regionStore.selectRegion(OVERALL_REGION_ID)"
       @history="showHistory = true"
     />
     <Legend />

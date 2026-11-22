@@ -3,9 +3,9 @@ import type { Map as MaplibreMap, GeoJSONSource } from 'maplibre-gl'
 import { useMap } from './useMap'
 import { useSettingsStore } from '@/stores/settings'
 import { BASEMAPS } from '@/config/basemaps'
+import { OVERALL_REGION_ID, SUB_REGION_IDS } from '@/config/regions'
 
 const SHAPES_BASE = (import.meta.env.VITE_SHAPES_BASE as string | undefined) ?? '/shapes'
-const DISTRICT_IDS = ['lasa', 'rikaze', 'shannan', 'linzhi', 'changdu', 'naqu', 'ali'] as const
 
 function shiftCoords(geojson: GeoJSON.FeatureCollection, dx: number, dy: number): GeoJSON.FeatureCollection {
   function shiftRing(ring: number[][]): number[][] {
@@ -29,7 +29,7 @@ let layersAdded = false
 
 // ── Composable ─────────────────────────────────────────────────────────────────
 
-export function useXizangBoundary() {
+export function useAdminBoundary() {
   const { map }   = useMap()
   const settings  = useSettingsStore()
 
@@ -53,20 +53,20 @@ export function useXizangBoundary() {
   function showLayers(m: MaplibreMap) {
     if (!layersAdded) return
     try {
-      m.setLayoutProperty('xizang-prefecture-halo', 'visibility', 'visible')
-      m.setLayoutProperty('xizang-prefecture-line', 'visibility', 'visible')
-      m.setLayoutProperty('xizang-outer-halo',      'visibility', 'visible')
-      m.setLayoutProperty('xizang-outer-line',      'visibility', 'visible')
+      m.setLayoutProperty('admin-sub-halo', 'visibility', 'visible')
+      m.setLayoutProperty('admin-sub-line', 'visibility', 'visible')
+      m.setLayoutProperty('admin-outer-halo',      'visibility', 'visible')
+      m.setLayoutProperty('admin-outer-line',      'visibility', 'visible')
     } catch {}
   }
 
   function hideLayers(m: MaplibreMap) {
     if (!layersAdded) return
     try {
-      m.setLayoutProperty('xizang-prefecture-halo', 'visibility', 'none')
-      m.setLayoutProperty('xizang-prefecture-line', 'visibility', 'none')
-      m.setLayoutProperty('xizang-outer-halo',      'visibility', 'none')
-      m.setLayoutProperty('xizang-outer-line',      'visibility', 'none')
+      m.setLayoutProperty('admin-sub-halo', 'visibility', 'none')
+      m.setLayoutProperty('admin-sub-line', 'visibility', 'none')
+      m.setLayoutProperty('admin-outer-halo',      'visibility', 'none')
+      m.setLayoutProperty('admin-outer-line',      'visibility', 'none')
     } catch {}
   }
 
@@ -74,52 +74,52 @@ export function useXizangBoundary() {
     if (!active) return  // 卸载后 load 事件仍触发时（如切回已有图层）直接返回
 
     if (layersAdded) {
-      if (settings.showXizangBoundary) showLayers(m)
+      if (settings.showAdminBoundary) showLayers(m)
       return
     }
 
-    const [xizangGeo, ...prefGeos] = await Promise.all([
-      loadGeo('xizang'),
-      ...DISTRICT_IDS.map(id => loadGeo(id)),
+    const [overallGeo, ...prefGeos] = await Promise.all([
+      loadGeo(OVERALL_REGION_ID),
+      ...SUB_REGION_IDS.map(id => loadGeo(id)),
     ])
 
     if (!active) return  // GeoJSON 加载完成时组件可能已卸载
-    if (!xizangGeo) return
+    if (!overallGeo) return
 
     const prefFeatures: GeoJSON.Feature[] = []
     prefGeos.forEach(gj => { if (gj) prefFeatures.push(...gj.features) })
 
-    m.addSource('xizang-boundary-outer', {
+    m.addSource('admin-boundary-outer', {
       type: 'geojson',
-      data: applyCoordSys(xizangGeo),
+      data: applyCoordSys(overallGeo),
     })
-    m.addSource('xizang-boundary-prefectures', {
+    m.addSource('admin-boundary-sub', {
       type: 'geojson',
       data: applyCoordSys({ type: 'FeatureCollection', features: prefFeatures }),
     })
 
-    // 地市分界（视觉权重低，先加层在下方）
+    // 下级区域分界（视觉权重低，先加层在下方）
     m.addLayer({
-      id: 'xizang-prefecture-halo', type: 'line', source: 'xizang-boundary-prefectures',
+      id: 'admin-sub-halo', type: 'line', source: 'admin-boundary-sub',
       paint: { 'line-color': 'rgba(0,0,0,0.4)', 'line-width': 1.5 },
     })
     m.addLayer({
-      id: 'xizang-prefecture-line', type: 'line', source: 'xizang-boundary-prefectures',
+      id: 'admin-sub-line', type: 'line', source: 'admin-boundary-sub',
       paint: { 'line-color': 'rgba(255,255,255,0.5)', 'line-width': 0.75 },
     })
 
     // 全区外轮廓（视觉权重高，后加层在上方）
     m.addLayer({
-      id: 'xizang-outer-halo', type: 'line', source: 'xizang-boundary-outer',
+      id: 'admin-outer-halo', type: 'line', source: 'admin-boundary-outer',
       paint: { 'line-color': 'rgba(0,0,0,0.5)', 'line-width': 2.5 },
     })
     m.addLayer({
-      id: 'xizang-outer-line', type: 'line', source: 'xizang-boundary-outer',
+      id: 'admin-outer-line', type: 'line', source: 'admin-boundary-outer',
       paint: { 'line-color': 'rgba(255,255,255,0.85)', 'line-width': 1.5 },
     })
 
     layersAdded = true
-    if (!settings.showXizangBoundary) hideLayers(m)
+    if (!settings.showAdminBoundary) hideLayers(m)
   }
 
   // map 就绪时初始化（处理初次渲染竞态）
@@ -139,16 +139,16 @@ export function useXizangBoundary() {
     async () => {
       const m = map.value
       if (!m || !layersAdded) return
-      const [xizangGeo, ...prefGeos] = await Promise.all([
-        loadGeo('xizang'),
-        ...DISTRICT_IDS.map(id => loadGeo(id)),
+      const [overallGeo, ...prefGeos] = await Promise.all([
+        loadGeo(OVERALL_REGION_ID),
+        ...SUB_REGION_IDS.map(id => loadGeo(id)),
       ])
-      if (!xizangGeo) return
+      if (!overallGeo) return
       const prefFeatures: GeoJSON.Feature[] = []
       prefGeos.forEach(gj => { if (gj) prefFeatures.push(...gj.features) })
       try {
-        (m.getSource('xizang-boundary-outer') as GeoJSONSource)?.setData(applyCoordSys(xizangGeo))
-        ;(m.getSource('xizang-boundary-prefectures') as GeoJSONSource)?.setData(
+        (m.getSource('admin-boundary-outer') as GeoJSONSource)?.setData(applyCoordSys(overallGeo))
+        ;(m.getSource('admin-boundary-sub') as GeoJSONSource)?.setData(
           applyCoordSys({ type: 'FeatureCollection', features: prefFeatures }),
         )
       } catch {}
@@ -157,7 +157,7 @@ export function useXizangBoundary() {
 
   // 设置开关实时响应
   watch(
-    () => settings.showXizangBoundary,
+    () => settings.showAdminBoundary,
     (show) => {
       const m = map.value
       if (!m) return

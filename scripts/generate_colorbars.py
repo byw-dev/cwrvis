@@ -9,9 +9,9 @@ generate_colorbars.py
 
 CSV 更新后须重跑本脚本并将生成的 colorbars.ts commit 到 git。
 """
+import argparse
 import csv
 import pathlib
-import textwrap
 
 # 系统当前支持的 15 个变量（与 frontend/src/config/vars.ts 保持一致）
 SYSTEM_VARS = {
@@ -27,15 +27,15 @@ CSV_MAP = {
     "month_mm_values_maxmin_summary.csv":  ("month", "mm"),
 }
 
-ROOT    = pathlib.Path(__file__).parent.parent
-CSV_DIR = ROOT / "data" / "colorbars"
-OUT     = ROOT / "frontend" / "src" / "config" / "colorbars.ts"
+ROOT            = pathlib.Path(__file__).parent.parent
+DEFAULT_CSV_DIR = ROOT / "data" / "colorbars"
+OUT             = ROOT / "frontend" / "src" / "config" / "colorbars.ts"
 
 
-def load_presets() -> dict:
+def load_presets(csv_dir: pathlib.Path) -> dict:
     result: dict = {}
     for fname, (gran, unit) in CSV_MAP.items():
-        path = CSV_DIR / fname
+        path = csv_dir / fname
         with open(path, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 var = row["varname"].strip()
@@ -82,7 +82,11 @@ def render_ts(presets: dict) -> str:
 
 
 def main() -> None:
-    presets = load_presets()
+    parser = argparse.ArgumentParser(description="色卡量程 CSV → colorbars.ts")
+    parser.add_argument("--csv-dir", default=DEFAULT_CSV_DIR, type=pathlib.Path, metavar="DIR")
+    args = parser.parse_args()
+
+    presets = load_presets(args.csv_dir)
     missing = []
     for var in SYSTEM_VARS:
         for gran in ("year", "month"):
@@ -94,7 +98,7 @@ def main() -> None:
 
     ts = render_ts(presets)
     OUT.write_text(ts, encoding="utf-8")
-    print(f"Generated {OUT.relative_to(ROOT)} ({len(presets)} vars)")
+    print(f"Generated {OUT.relative_to(ROOT)} ({len(presets)} vars)  <- {args.csv_dir}")
 
 
 if __name__ == "__main__":

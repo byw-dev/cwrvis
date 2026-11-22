@@ -37,8 +37,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const basemap = ref<BasemapId>(
     readLS<BasemapId>('basemap', 'osm')
   )
-  const showXizangBoundary = ref<boolean>(
-    readLS<boolean>('xizang_boundary', true)
+  const showAdminBoundary = ref<boolean>(
+    readLS<boolean>('admin_boundary', true)
   )
   const scaleMode = ref<'auto' | 'preset'>(
     readLS<'auto' | 'preset'>('scale_mode', 'auto')
@@ -61,7 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Auto-persist on change
   watch(basemap,              v => writeLS('basemap',         v))
-  watch(showXizangBoundary,  v => writeLS('xizang_boundary', v))
+  watch(showAdminBoundary,   v => writeLS('admin_boundary', v))
   watch(scaleMode,           v => writeLS('scale_mode',      v))
   watch(fontSize,   v => writeLS('font_size', v))
   watch(colormaps,  v => writeLS('colormaps',  v), { deep: true })
@@ -92,7 +92,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     basemap,
-    showXizangBoundary,
+    showAdminBoundary,
     scaleMode,
     fontSize,
     colormaps,
