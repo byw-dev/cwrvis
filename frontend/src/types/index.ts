@@ -29,11 +29,12 @@ export interface VarGroup {
 
 // ─── Region ──────────────────────────────────────────────────────────────────
 
-export type RegionId =
-  | 'xizang' | 'lasa' | 'rikaze' | 'shannan'
-  | 'linzhi' | 'changdu' | 'naqu' | 'ali'
+// RegionId 在 config/regions.ts 定义（那里是区域集合的唯一真相源）。
+// re-export 不产生本地绑定，下面 RegionMeta 要用，所以同时 import。
+import type { RegionId } from '@/config/regions'
+export type { RegionId }
 
-export type RegionLevel = 'province' | 'prefecture'
+export type RegionLevel = 'region' | 'province' | 'prefecture'
 
 export interface RegionMeta {
   region_id: RegionId

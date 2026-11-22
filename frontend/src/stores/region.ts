@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { RegionId, RegionMeta, VarName, AggMode, ApiResult } from '@/types'
+import { OVERALL_REGION_ID } from '@/config/regions'
 import { YEAR_MIN, YEAR_MAX } from '@/config/constants'
 
 // ── New wide-schema API response types ────────────────────────────────────────
@@ -30,7 +31,7 @@ const MODE_TO_GRAN: Record<AggMode, string> = {
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useRegionStore = defineStore('region', () => {
-  const selRegionId = ref<RegionId>('xizang')
+  const selRegionId = ref<RegionId>(OVERALL_REGION_ID)
   const regions     = ref<RegionMeta[]>([])
   // key: `${regionId}_${granularity}` e.g. 'xizang_year'
   const statsCache  = ref(new Map<string, StatsRow[]>())
@@ -118,6 +119,7 @@ export const useRegionStore = defineStore('region', () => {
 
 // ─── Fallback ────────────────────────────────────────────────────────────────
 
+// /meta/regions 请求失败时的兜底，须与 backend/config.py 的 REGION_MAP 一致
 const FALLBACK_REGIONS: RegionMeta[] = [
   { region_id: 'xizang',  name: '西藏自治区', level: 'province'   },
   { region_id: 'lasa',    name: '拉萨市',     level: 'prefecture' },

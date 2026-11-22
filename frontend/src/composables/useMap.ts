@@ -6,14 +6,6 @@ import { BASEMAPS } from '@/config/basemaps'
 import { computeGridBounds } from '@/utils/grid'
 import type { BasemapConfig } from '@/types'
 
-// Fallback grid axes used when meta.json has not yet loaded at initMap time.
-// Values match the current 1°×1° dataset (25 lon × 15 lat, centers 75.5–99.5°E / 39.5–25.5°N).
-// Once meta loads the overlay corners are updated via setCoordinates automatically.
-// NOTE: canvas pixel dimensions are fixed at initMap time; if a future dataset has
-// different grid shape, ensure meta is loaded before initMap is called.
-const FALLBACK_LATS = Array.from({ length: 15 }, (_, i) => 39.5 - i) as number[]
-const FALLBACK_LONS = Array.from({ length: 25 }, (_, i) => 75.5 + i) as number[]
-
 const MAX_CANVAS_PIXELS = 400_000
 const MIN_GRID_SCALE    = 10
 const MAX_GRID_SCALE    = 48
@@ -44,6 +36,12 @@ function getGridCorners(
   ]
 }
 
+// Grid extent as a MapLibre LngLatBoundsLike, for the initial camera fit.
+function gridBoundsLngLat(lats: number[], lons: number[]): [[number, number], [number, number]] {
+  const { lonMin, lonMax, latMin, latMax } = computeGridBounds(lats, lons)
+  return [[lonMin, latMin], [lonMax, latMax]]
+}
+
 // ─── Module-level singletons：grid / region 模块共享同一 Map 实例 ───────────────────────
 
 const _map        = shallowRef<MaplibreMap | null>(null)
@@ -53,15 +51,23 @@ export function useMap() {
   const settings  = useSettingsStore()
   const metaStore = useMetaStore()
 
-  function currentLats() { return metaStore.grid?.lat ?? FALLBACK_LATS }
-  function currentLons() { return metaStore.grid?.lon ?? FALLBACK_LONS }
+  function currentLats() { return metaStore.grid?.lat ?? [] }
+  function currentLons() { return metaStore.grid?.lon ?? [] }
 
   function initMap(container: HTMLElement): void {
     if (_map.value) return
 
+    // MapView 挂载在 App.vue 的 `v-if="metaStore.isReady"` 门后，此处 grid 必定就绪。
+    // 保留守卫是为了让调用顺序被改动时立刻暴露，而不是静默退化成一份假格点。
+    const grid = metaStore.grid
+    if (!grid) {
+      console.warn('[useMap] meta.grid 未就绪，跳过 initMap')
+      return
+    }
+
     const basemap = BASEMAPS[settings.basemap]
-    const lats = currentLats()
-    const lons = currentLons()
+    const lats = grid.lat
+    const lons = grid.lon
     const k = computeGridScale(lons.length, lats.length)
 
     // Canvas source 不依赖异步图片加载，draw 操作同步完成后 play() 即可显示
@@ -90,8 +96,9 @@ export function useMap() {
           { id: 'basemap-layer', type: 'raster', source: 'basemap' },
         ],
       },
-      center: [87.75, 32.5],
-      zoom: 5,
+      // 初始视野由格点范围推导，换数据集时自动跟随，无需改代码
+      bounds: gridBoundsLngLat(lats, lons),
+      fitBoundsOptions: { padding: 24 },
       minZoom: 3,
       maxZoom: 12,
       attributionControl: false,
