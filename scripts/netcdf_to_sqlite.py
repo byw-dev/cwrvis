@@ -205,16 +205,16 @@ def _scan_files(
     return yearly, monthly
 
 
-def _reference_grid(paths) -> tuple[list[float], list[float], Path]:
+def _reference_grid(paths) -> tuple[list[float], list[float], np.ndarray]:
     """
-    扫描全部 nc，返回 (基准 lat 降序, 基准 lon 升序, 覆盖基准格点的样本文件)。
+    扫描全部 nc，返回 (基准 lat 降序, 基准 lon 升序, 拼接后的 dxy)。
 
     甲方数据可能出现个别年份缺行的情况（如 2025 年缺最南一行 16.5°N），
     直接 np.stack 会因形状不一致报错。取并集作为基准格点，各帧 reindex 后
     缺失处为 NaN —— 面积加权时 NaN 单元不计权重，格点图上留空。
 
-    样本文件须自身就覆盖完整基准格点：meta 的 dxy（格点面积）从它读取，
-    若取到缺行的文件，reindex 出来的 dxy 会带 NaN 行。
+    dxy 从全部文件拼接：同一格点在多个文件中出现时必须一致；任何格点缺失
+    dxy 直接报错，避免把缺失面积当 0 参与区域面积计算。
     """
     lats: set[float] = set()
     lons: set[float] = set()
@@ -228,14 +228,30 @@ def _reference_grid(paths) -> tuple[list[float], list[float], Path]:
         lons.update(lo)
 
     ref_lats, ref_lons = sorted(lats, reverse=True), sorted(lons)
-    for path, (la, lo) in coords.items():
-        if la == ref_lats and lo == ref_lons:
-            return ref_lats, ref_lons, path
+    lat_ix = {v: i for i, v in enumerate(ref_lats)}
+    lon_ix = {v: i for i, v in enumerate(ref_lons)}
+    dxy = np.full((len(ref_lats), len(ref_lons)), np.nan)
+    filled = np.zeros(dxy.shape, dtype=bool)
 
-    # 没有任何单个文件覆盖完整并集：退而取格点最多的一个，dxy 可能带 NaN
-    widest = max(coords, key=lambda p: len(coords[p][0]) * len(coords[p][1]))
-    print(f"  WARNING: 无单个 nc 覆盖完整基准格点，dxy 取自 {widest.name}（可能含 NaN 行）")
-    return ref_lats, ref_lons, widest
+    for path, (la, lo) in coords.items():
+        with xr.open_dataset(path) as ds:
+            if "dxy" not in ds.data_vars:
+                sys.exit(f"ERROR: {path.name} 缺少 dxy 变量")
+            block = ds["dxy"].values.astype(float)
+        li = np.array([lat_ix[v] for v in la])
+        lj = np.array([lon_ix[v] for v in lo])
+        existing = filled[np.ix_(li, lj)]
+        if existing.any() and not np.allclose(
+            dxy[np.ix_(li, lj)][existing], block[existing], rtol=0.0, atol=1e-6
+        ):
+            sys.exit(f"ERROR: dxy 在多个文件中不一致（{path.name}）")
+        dxy[np.ix_(li, lj)] = block
+        filled[np.ix_(li, lj)] = True
+
+    missing = int((~filled).sum())
+    if missing:
+        sys.exit(f"ERROR: {missing} 个格点缺少 dxy，无法计算区域面积")
+    return ref_lats, ref_lons, dxy
 
 
 def _aligned(ds: xr.Dataset, ref_lats: list[float], ref_lons: list[float]) -> xr.Dataset:
@@ -250,14 +266,13 @@ def _read_grid_meta(
     sample_path: Path,
     ref_lats: list[float],
     ref_lons: list[float],
-) -> tuple[list[float], list[float], list[str], np.ndarray]:
+) -> tuple[list[float], list[float], list[str]]:
     with xr.open_dataset(sample_path) as ds:
         ds = _aligned(ds, ref_lats, ref_lons)
         lats = [float(v) for v in ds.coords["latitude"].values]
         lons = [float(v) for v in ds.coords["longitude"].values]
         var_names = [v for v in ds.data_vars if v in INCLUDE_VARS]
-        dxy = ds["dxy"].values.astype(float)  # shape (lat, lon)，单位 m²
-    return lats, lons, var_names, dxy
+    return lats, lons, var_names
 
 
 # --------------------------------------------------------------------------- #
@@ -280,7 +295,19 @@ def _load_frames(
         print(f"  [{idx:>3}/{total}] {path.name}", flush=True)
         with xr.open_dataset(path) as ds:
             ds = _aligned(ds, ref_lats, ref_lons)
-            data[key] = {var: ds[var].values.astype(float) for var in var_names}
+            frame_vals = {}
+            for var in var_names:
+                vals = ds[var].values.astype(float)
+                # 方案 A：kg→mm 除数按区域只算一次，不随每帧/每 var 的缺测掩码变化。
+                # 含 NaN 时分子会丢掉缺测格点、分母不会，结果偏小；宁可中止也不静默算错。
+                if np.isnan(vals).any():
+                    sys.exit(
+                        f"ERROR: {path.name} 的 {var} 含 NaN。"
+                        "当前 kg→mm 除数为每区域固定值，缺测格点会使换算结果偏小；"
+                        "请先补齐数据，或改用逐帧除数方案（见 docs/design/data-pipeline.md）。"
+                    )
+                frame_vals[var] = vals
+            data[key] = frame_vals
     return data
 
 
@@ -406,10 +433,10 @@ def main() -> None:
         sys.exit(f"ERROR: {args.nc_dir} 下未找到 nc 文件")
 
     all_paths = list(yearly.values()) + list(monthly.values())
-    ref_lats, ref_lons, sample = _reference_grid(all_paths)
-    print(f"基准格点：{len(ref_lats)} lat × {len(ref_lons)} lon  (样本 {sample.name})")
+    ref_lats, ref_lons, dxy = _reference_grid(all_paths)
+    print(f"基准格点：{len(ref_lats)} lat × {len(ref_lons)} lon  (dxy 已拼接校验)")
 
-    lats, lons, var_names, dxy = _read_grid_meta(sample, ref_lats, ref_lons)
+    lats, lons, var_names = _read_grid_meta(all_paths[0], ref_lats, ref_lons)
     print(
         f"grid: {len(lats)}×{len(lons)}  "
         f"vars({len(var_names)}): {var_names}\n"
@@ -444,7 +471,12 @@ def main() -> None:
     for region_id, region_geom in regions:
         print(f"  {region_id} — prepare...", end=" ", flush=True)
         agg.prepare(region_geom, lats, lons)
-        areas[region_id] = agg.mm_divisor_m2(dxy)
+        area = agg.mm_divisor_m2(dxy)
+        if not np.isfinite(area) or area <= 0:
+            # 区域与格网无有效交集：不写 region_areas（表为 NOT NULL），也不写空统计行
+            print("跳过：与格网无有效交集")
+            continue
+        areas[region_id] = area
         print("aggregate...", end=" ", flush=True)
 
         rows: list[dict] = []

@@ -118,6 +118,8 @@ def main() -> None:
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
 
     dxy = np.array(meta["grid"]["dxy"], dtype=float)   # shape (lat, lon)，单位 m²
+    if not np.isfinite(dxy).all() or np.any(dxy <= 0):
+        sys.exit("ERROR: meta.json 的 grid.dxy 含非有限值或非正值，无法换算 mm")
     var_names = sorted(meta["vars"])
     args.out_dir.mkdir(parents=True, exist_ok=True)
 

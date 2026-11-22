@@ -66,16 +66,16 @@ def _scan_files(nc_dir: Path) -> tuple[dict, dict]:
     return yearly, monthly
 
 
-def _reference_grid(paths) -> tuple[list[float], list[float], Path]:
+def _reference_grid(paths) -> tuple[list[float], list[float], np.ndarray]:
     """
-    扫描全部 nc，返回 (基准 lat 降序, 基准 lon 升序, 覆盖基准格点的样本文件)。
+    扫描全部 nc，返回 (基准 lat 降序, 基准 lon 升序, 拼接后的 dxy)。
 
     甲方数据可能出现个别年份缺行的情况（如 2025 年缺最南一行 16.5°N），
     直接 np.stack 会因形状不一致报错。取并集作为基准格点，各帧 reindex 后
     缺失处为 NaN —— 面积加权时 NaN 单元不计权重，格点图上留空。
 
-    样本文件须自身就覆盖完整基准格点：meta 的 dxy（格点面积）从它读取，
-    若取到缺行的文件，reindex 出来的 dxy 会带 NaN 行。
+    dxy 从全部文件拼接：同一格点在多个文件中出现时必须一致；任何格点缺失
+    dxy 直接报错，避免把 NaN 写进 meta.json（非法 JSON）或把缺失面积当 0。
     """
     lats: set[float] = set()
     lons: set[float] = set()
@@ -89,14 +89,30 @@ def _reference_grid(paths) -> tuple[list[float], list[float], Path]:
         lons.update(lo)
 
     ref_lats, ref_lons = sorted(lats, reverse=True), sorted(lons)
-    for path, (la, lo) in coords.items():
-        if la == ref_lats and lo == ref_lons:
-            return ref_lats, ref_lons, path
+    lat_ix = {v: i for i, v in enumerate(ref_lats)}
+    lon_ix = {v: i for i, v in enumerate(ref_lons)}
+    dxy = np.full((len(ref_lats), len(ref_lons)), np.nan)
+    filled = np.zeros(dxy.shape, dtype=bool)
 
-    # 没有任何单个文件覆盖完整并集：退而取格点最多的一个，dxy 可能带 NaN
-    widest = max(coords, key=lambda p: len(coords[p][0]) * len(coords[p][1]))
-    print(f"  WARNING: 无单个 nc 覆盖完整基准格点，dxy 取自 {widest.name}（可能含 NaN 行）")
-    return ref_lats, ref_lons, widest
+    for path, (la, lo) in coords.items():
+        with xr.open_dataset(path) as ds:
+            if "dxy" not in ds.data_vars:
+                sys.exit(f"ERROR: {path.name} 缺少 dxy 变量")
+            block = ds["dxy"].values.astype(float)
+        li = np.array([lat_ix[v] for v in la])
+        lj = np.array([lon_ix[v] for v in lo])
+        existing = filled[np.ix_(li, lj)]
+        if existing.any() and not np.allclose(
+            dxy[np.ix_(li, lj)][existing], block[existing], rtol=0.0, atol=1e-6
+        ):
+            sys.exit(f"ERROR: dxy 在多个文件中不一致（{path.name}）")
+        dxy[np.ix_(li, lj)] = block
+        filled[np.ix_(li, lj)] = True
+
+    missing = int((~filled).sum())
+    if missing:
+        sys.exit(f"ERROR: {missing} 个格点缺少 dxy，无法生成 meta.json")
+    return ref_lats, ref_lons, dxy
 
 
 def _aligned(ds: xr.Dataset, ref_lats: list[float], ref_lons: list[float]) -> xr.Dataset:
@@ -107,7 +123,7 @@ def _aligned(ds: xr.Dataset, ref_lats: list[float], ref_lons: list[float]) -> xr
     return ds.reindex(latitude=ref_lats, longitude=ref_lons)
 
 
-def _build_meta(ds: xr.Dataset, year_keys, month_keys) -> tuple[dict, list[str]]:
+def _build_meta(ds: xr.Dataset, year_keys, month_keys, dxy: np.ndarray) -> tuple[dict, list[str]]:
     lat = ds.coords["latitude"].values.tolist()
     lon = ds.coords["longitude"].values.tolist()
 
@@ -121,9 +137,11 @@ def _build_meta(ds: xr.Dataset, year_keys, month_keys) -> tuple[dict, list[str]]
             "units": attrs.get("units", ""),
         }
 
-    grid: dict = {"lat": lat, "lon": lon}
-    if "dxy" in ds.data_vars:
-        grid["dxy"] = [[float(v) for v in row] for row in ds["dxy"].values]
+    grid: dict = {
+        "lat": lat,
+        "lon": lon,
+        "dxy": [[float(v) for v in row] for row in dxy],
+    }
 
     meta = {
         "grid": grid,
@@ -228,7 +246,9 @@ def _compute_means(
 
 
 def _write(path: Path, data) -> None:
-    path.write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False))
+    # allow_nan=False：meta 里的 dxy 若有 NaN，宁可在这里失败，也不写出浏览器
+    # JSON.parse 无法解析的非标准 NaN 字面量（数据帧的 NaN 已在 _to_json_frames 转 null）
+    path.write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False))
 
 
 def main() -> None:
@@ -242,11 +262,13 @@ def main() -> None:
         sys.exit(f"ERROR: {args.nc_dir} 下未找到 nc 文件")
 
     all_paths = list(yearly.values()) + list(monthly.values())
-    ref_lats, ref_lons, sample = _reference_grid(all_paths)
-    print(f"基准格点：{len(ref_lats)} lat × {len(ref_lons)} lon  (样本 {sample.name})")
+    ref_lats, ref_lons, dxy = _reference_grid(all_paths)
+    print(f"基准格点：{len(ref_lats)} lat × {len(ref_lons)} lon  (dxy 已拼接校验)")
 
-    with xr.open_dataset(sample) as ds:
-        meta, var_names = _build_meta(_aligned(ds, ref_lats, ref_lons), yearly.keys(), monthly.keys())
+    with xr.open_dataset(all_paths[0]) as ds:
+        meta, var_names = _build_meta(
+            _aligned(ds, ref_lats, ref_lons), yearly.keys(), monthly.keys(), dxy
+        )
 
     units_map = {var: meta["vars"][var]["units"] for var in var_names}
 

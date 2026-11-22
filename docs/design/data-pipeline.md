@@ -83,7 +83,7 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 
 **变量白名单**：`INCLUDE_VARS` 固定为与 `frontend/src/config/vars.ts` 一致的 15 个变量。此前用 `EXCLUDE_VARS` 只排除 `dxy`，接入完整版 nc（49 个变量）后会导出全部中间量，格点 JSON 体积与 SQLite 列数都会无谓膨胀。
 
-**基准格点对齐**：扫描全部 nc，取经纬度并集作为基准格点，各帧 `reindex` 到该网格，缺失格点填 NaN。甲方数据个别年份可能缺行（2025 年曾缺最南一行 16.5°N），直接 `np.stack` 会因形状不一致报错；面积加权时 NaN 格点不计权重，格点图上留空。`dxy` 从覆盖完整基准格点的样本文件读取。
+**基准格点对齐**：扫描全部 nc，取经纬度并集作为基准格点，各帧 `reindex` 到该网格，缺失格点填 NaN。甲方数据个别年份可能缺行（2025 年曾缺最南一行 16.5°N），直接 `np.stack` 会因形状不一致报错；面积加权时 NaN 格点不计权重，格点图上留空。`dxy` 从全部文件拼接并校验一致；任何格点缺失 `dxy` 直接报错，`meta.json` 以 `allow_nan=False` 序列化。
 
 ### 输出文件结构
 
@@ -128,7 +128,7 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 }
 ```
 
-**`grid.dxy`**：shape 15×25（lat×lon），单位 m²，供前端对 `units="kg"` 的 var 做 kg→mm 换算（`mm = kg / dxy[i][j]`）。
+**`grid.dxy`**：shape 与 `grid.lat/lon` 一致（如完整版 41×71、西藏 15×25），单位 m²，供前端对 `units="kg"` 的 var 做 kg→mm 换算（`mm = kg / dxy[i][j]`）。
 
 **`timeline.mean_season` 帧顺序**：index 0=春（3/4/5月），1=夏（6/7/8月），2=秋（9/10/11月），3=冬（12/1/2月）。
 
@@ -236,7 +236,9 @@ value = np.sum(vals) if var_unit == 'kg' else np.mean(vals)
 
 > ⚠️ 两者混用会得到荒谬结果。此前 `AreaWeightedMean` 错用区域总面积作除数，面积远小于一个 1° 格点的区域会算出十万毫米级的年降水。因为 `make data` 默认走路径 B（`data-sqlite-csv`），该缺陷长期未暴露 —— 只要执行 `make data-sqlite` 就会触发。
 
-`dxy` 数组从 netcdf 文件中读取（与格点 JSON 导出时使用的同一数组，单位 m²）。
+`dxy` 数组从 netcdf 文件中拼接读取（与格点 JSON 导出时使用的同一数组，单位 m²）；拼接后仍缺 `dxy` 的格点会让脚本直接报错。
+
+**缺测格点（方案 A）**：`area_m2` 每区域只存一个值，不随每帧/每 var 的缺测掩码变化。若某帧含 NaN，分子会丢掉缺测格点而分母不会，导致 mm 偏小；因此 `netcdf_to_sqlite.py` 在加载到任何含 NaN 的帧时**直接中止并报错**。`netcdf_to_json.py` 不受此限制（NaN 导出为 `null`）。若将来必须支持缺测，需改为逐帧除数（扩 `region_stats` schema 与前端取数）。
 
 **var 单位与聚合算子对应关系**（`PointInBoundary` 使用）：
 

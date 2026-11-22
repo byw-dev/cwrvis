@@ -64,8 +64,9 @@ nc-arrange:  ## 将甲方按年份分目录的 nc 归一化为 yearly/ + monthly
 	mkdir -p $(NC_DIR)/yearly $(NC_DIR)/monthly
 	find $(NC_DIR) -mindepth 2 -name 'ResultGrid_Y_*.nc' -not -path '*/yearly/*'  -exec mv {} $(NC_DIR)/yearly/  \;
 	find $(NC_DIR) -mindepth 2 -name 'ResultGrid_M_*.nc' -not -path '*/monthly/*' -exec mv {} $(NC_DIR)/monthly/ \;
-	find $(NC_DIR) -mindepth 1 -type d -empty -delete
-	@echo "==> yearly: $$(ls $(NC_DIR)/yearly | wc -l | tr -d ' ') 个   monthly: $$(ls $(NC_DIR)/monthly | wc -l | tr -d ' ') 个"
+	find $(NC_DIR) -mindepth 1 -type d -empty \
+		! -path "$(NC_DIR)/yearly" ! -path "$(NC_DIR)/monthly" -delete
+	@echo "==> yearly: $$(find $(NC_DIR)/yearly -maxdepth 1 -name '*.nc' | wc -l | tr -d ' ') 个   monthly: $$(find $(NC_DIR)/monthly -maxdepth 1 -name '*.nc' | wc -l | tr -d ' ') 个"
 
 colorbar-stats: data-grid  ## static/grid/ → COLORBAR_DIR 下 4 个色卡量程统计 CSV
 	uv run --project scripts python scripts/grid_colorbar_stats.py \

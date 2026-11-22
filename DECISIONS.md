@@ -366,12 +366,13 @@ LeftRail 侧边栏图标语义映射：旧"资源量"图标 → 新"总量"，�
 
 1. `INCLUDE_VARS` 正向白名单固定 15 个变量，与 `frontend/src/config/vars.ts` 一致；`netcdf_to_json.py` 与 `netcdf_to_sqlite.py` 共用同一份定义。
 2. `_reference_grid()` 扫描全部 nc，取经纬度并集作为基准格点；`_aligned()` 将各帧 `reindex` 到基准网格，缺失格点填 NaN。
-3. `dxy` 从覆盖完整基准格点的样本文件读取；若没有单个文件覆盖并集，取格点最多的文件并打印 WARNING。
+3. `dxy` 从全部文件拼接：同一格点在多个文件中出现时必须一致；任何格点缺失 `dxy` 直接报错。`meta.json` 以 `allow_nan=False` 序列化，避免写出浏览器 `JSON.parse` 无法解析的 NaN 字面量。
 4. `area_weighted` 方法下 kg→mm 的除数取有效格点面积 `Σ(dxy·w)/Σw`，与聚合值量纲（kg/格点）配套；`point_in_boundary` 仍取区域面积。
+5. **缺测处理（方案 A）**：`region_areas.area_m2` 每区域只存一个值，不随每帧/每 var 的缺测掩码变化。为避免「分子丢掉缺测格点、分母不丢」导致 mm 偏小，`netcdf_to_sqlite.py` 在加载到任何含 NaN 的帧时直接中止并报错；`netcdf_to_json.py` 仍允许 NaN（导出为 `null`，格点图留空）。若将来必须支持缺测，再改为逐帧除数（需扩 `region_stats` schema 与前端取数）。
 
-**原因**：白名单同时约束产物体积、DB 列数和前后端契约；对齐逻辑把「个别年份缺行」从致命错误降级为局部 NaN，面积加权自动忽略这些格点。
+**原因**：白名单同时约束产物体积、DB 列数和前后端契约；对齐逻辑把「个别年份缺行」从形状不一致的致命错误降级为局部 NaN。缺测场景选择 fail-fast 而不是静默近似，是因为偏差方向固定（mm 偏小）且难以在界面上察觉。
 
-**代价/权衡**：白名单是硬编码，新增变量需同时改 `vars.ts`、两个脚本与 `backend/config.py` 的 `KG_VARS`。
+**代价/权衡**：白名单是硬编码，新增变量需同时改 `vars.ts`、两个脚本与 `backend/config.py` 的 `KG_VARS`。方案 A 意味着含缺测的数据集无法走路径 A（`make data-sqlite`），需要先补数据或实现逐帧除数；这是有意的取舍。
 
 ---
 
