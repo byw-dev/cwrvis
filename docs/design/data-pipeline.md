@@ -17,7 +17,7 @@
 
 **目录结构：**
 ```
-data/nc/
+data/<variant>/nc/       # full（master）/ xizang / huanan
 ├── yearly/
 │   └── ResultGrid_Y_YYYY-MM-DD-00_YYYY-MM-DD-00.nc
 └── monthly/
@@ -141,12 +141,12 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 ### 执行方式
 
 ```bash
-# 默认路径（nc-dir=data/nc，out-dir=static/grid）—— 从项目根运行
+# 默认路径（nc-dir=data/full/nc，out-dir=static/grid）—— 从项目根运行
 uv run --project scripts python scripts/netcdf_to_json.py
 
 # 显式指定
 uv run --project scripts python scripts/netcdf_to_json.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --out-dir static/grid
 ```
 
@@ -328,13 +328,13 @@ ORDER BY season;
 ```bash
 # 默认方法（area_weighted）
 uv run --project scripts python scripts/netcdf_to_sqlite.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --shape-dir data/shapes \
   --db-path db/stats.db
 
 # 切换方法
 uv run --project scripts python scripts/netcdf_to_sqlite.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --shape-dir data/shapes \
   --db-path db/stats_pointin.db \
   --method point_in_boundary
@@ -438,7 +438,7 @@ var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json �
 2. make colorbars      （data/colorbars/ CSV → frontend/src/config/colorbars.ts；CSV 在 git 中，通常只需首次或 CSV 更新后运行）
 3. 生成区域统计 SQLite（二选一）：
    - make data-sqlite-csv  （路径 B：从预计算 CSV 导入，需要 data/csv/ 就绪）
-   - make data-sqlite      （路径 A：从 netcdf 格点空间聚合，需要 data/nc/ 就绪）
+   - make data-sqlite      （路径 A：从 netcdf 格点空间聚合，需要 data/full/nc/ 就绪）
 4. make data-grid      （生成格点 JSON 及 meta.json，需要 netcdf 原始数据）
 5. make data-reports   （data/docx/ → static/reports/，需甲方报告文件就绪）
 6. make frontend       （编译前端，需要 Node.js 环境就绪）

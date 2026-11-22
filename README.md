@@ -56,14 +56,14 @@ make dev
 # 文件命名格式：{region_id}_NCEP_00to25_{Y|M}_client.csv
 
 make data-sqlite-csv   # 生成 db/stats.db
-make data-grid         # 生成 static/grid/（需要 data/nc/ 原始 netcdf）
+make data-grid         # 生成 static/grid/（需要 data/full/nc/ 原始 netcdf）
 make shapes            # 复制区域 GeoJSON 到 static/shapes/
 ```
 
 **路径 B — 从 netcdf 原始数据生成（无预计算 CSV 时使用）**
 
 ```bash
-# 将甲方提供的 netcdf 文件放入 data/nc/yearly/ 和 data/nc/monthly/
+# 将甲方提供的 netcdf 文件放入 data/full/nc/yearly/ 和 data/full/nc/monthly/
 
 make data              # 一次性生成 db/stats.db + static/grid/ + static/shapes/
 ```
