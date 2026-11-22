@@ -24,9 +24,15 @@ data/<variant>/nc/       # full（master）/ xizang / huanan
     └── ResultGrid_M_YYYY-MM-DD-00_YYYY-MM-DD-00.nc
 ```
 
-**当前数据范围：**
-- 年颗粒度：2000–2015，共 16 个文件
-- 月颗粒度：2000-01 至 2025-12，共 312 个文件
+**当前数据范围（按变体）：**
+
+| 变体 | 目录 | 年 | 月 | 网格 | nc 变量数 |
+|------|------|-----|-----|------|-----------|
+| master | `data/full/nc/` | 2000–2024，25 个 | 2000-01 ~ 2024-12，300 个 | 全国 41×71 | 49 |
+| custom/xizang | `data/xizang/nc/` | 2000–2025，26 个 | 2000-01 ~ 2025-12，312 个 | 西藏裁切 15×25 | 16 |
+| custom/huanan | `data/huanan/nc/` | 2000–2025，26 个 | 2000-01 ~ 2025-12，312 个 | 华南裁切 14×21 | 41 |
+
+三份数据并存于同一工作树，由 Makefile 的 `NC_DIR` 指向当前分支对应目录。
 
 **时间步解析规则**（取起始日期）：
 - `ResultGrid_Y_2006-01-01-00_2007-01-01-00.nc` → yearly: 2006
@@ -34,7 +40,7 @@ data/<variant>/nc/       # full（master）/ xizang / huanan
 
 **变量（实测）：**
 
-每个 nc 文件包含以下 16 个变量，其中 `dxy`（网格面积，值恒定）不生成独立数据文件，但会导出到 `meta.json` 供前端单位换算使用：
+nc 文件的变量集合随数据源而异（完整版 49 个、华南裁切版 41 个、西藏裁切版 16 个），其中多数是前端不使用的中间量。脚本按白名单只导出系统使用的 15 个变量（见下节），`dxy`（网格面积，值恒定）不生成独立数据文件，但会导出到 `meta.json` 供前端单位换算使用：
 
 | var 名 | long_name | units |
 |--------|-----------|-------|
@@ -74,6 +80,10 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 **按 var 整体打包**：每个输出文件包含一个 var 在一种颗粒度下的全部时间步数据，前端切换 var 时一次请求获取完整时间轴，播放期间零网络等待。
 
 **元数据与数据分离**：所有网格坐标、时间轴、var 描述信息集中在一个 `meta.json` 中，数据文件只存纯数值数组，消除冗余。var 的 `name`/`long_name`/`units` 直接从 nc 文件 attrs 中读取。
+
+**变量白名单**：`INCLUDE_VARS` 固定为与 `frontend/src/config/vars.ts` 一致的 15 个变量。此前用 `EXCLUDE_VARS` 只排除 `dxy`，接入完整版 nc（49 个变量）后会导出全部中间量，格点 JSON 体积与 SQLite 列数都会无谓膨胀。
+
+**基准格点对齐**：扫描全部 nc，取经纬度并集作为基准格点，各帧 `reindex` 到该网格，缺失格点填 NaN。甲方数据个别年份可能缺行（2025 年曾缺最南一行 16.5°N），直接 `np.stack` 会因形状不一致报错；面积加权时 NaN 格点不计权重，格点图上留空。`dxy` 从覆盖完整基准格点的样本文件读取。
 
 ### 输出文件结构
 
@@ -407,6 +417,8 @@ uv run --project scripts python scripts/csv_to_sqlite.py \
 
 var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json 中，由前端 `frontend/src/config/vars.ts` 单独维护，与数据预生成流程解耦。
 
+色卡量程的统计 CSV（`data/colorbars/`）可由 `make colorbar-stats` 从已生成的 `static/grid/` 反算，口径见 `scripts/grid_colorbar_stats.py` 模块 docstring：样本为该粒度下全部帧 × 全部格点（丢弃 NaN），kg 变量先逐格点除以 dxy，量程取 p10/p90；`min < 0` 时取对称量程。
+
 ---
 
 ## 项目构建脚本（`Makefile`）
@@ -417,10 +429,12 @@ var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json �
 
 | Target | 功能 |
 |--------|------|
+| `make nc-arrange` | 将甲方按年份分目录的 nc 幂等归一到 `yearly/` + `monthly/`（`NC_DIR` 指向的目录） |
 | `make data-sqlite` | 路径 A：运行 `netcdf_to_sqlite.py`，从 netcdf 格点空间聚合（可通过 `METHOD=point_in_boundary` 覆盖算法） |
 | `make data-sqlite-csv` | 路径 B：运行 `csv_to_sqlite.py`，从预计算 CSV 导入（需要 `data/csv/` 就绪） |
 | `make data-grid` | 运行 `netcdf_to_json.py`，生成格点 JSON |
-| `make colorbars` | 解析 `data/colorbars/*.csv`（4 个统计文件），生成 `frontend/src/config/colorbars.ts`（色卡预设量程静态查表）；CSV 文件更新后须重跑并 commit 生成文件 |
+| `make colorbar-stats` | 运行 `grid_colorbar_stats.py`，从 `static/grid/` 反算色卡量程统计 CSV，输出至 `COLORBAR_DIR` |
+| `make colorbars` | 解析 `COLORBAR_DIR/*.csv`（4 个统计文件），生成 `frontend/src/config/colorbars.ts`（色卡预设量程静态查表）；CSV 文件更新后须重跑并 commit 生成文件 |
 | `make shapes` | 将 `data/shapes/` 中文文件名按 region_id 重命名复制到 `static/shapes/` |
 | `make frontend` | `pnpm build`，产物输出至 `static/web/` |
 | `make package` | 组装分发目录 + 打 `.tar.gz` 压缩包（含 `bin/`、`app/`、`static/`、`db/`、`conf/`） |

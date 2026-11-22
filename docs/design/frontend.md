@@ -363,7 +363,7 @@ function getGridCorners(basemap: BasemapConfig): [LngLat, LngLat, LngLat, LngLat
 主线程：postMessage({ frame2d, colormap, lutSize, threshMin, threshMax, targetW, targetH, dxy, convertToMm }) → Worker
 Worker：
   0. 若 convertToMm，逐格点做 value[i][j] / dxy[i][j]（先除后插值，见「kg→mm 单位换算」节）
-  1. 双线性插值（15×25 → targetW×targetH，默认约 600×400）
+  1. 双线性插值（格点尺寸由 meta 决定，如 41×71 → targetW×targetH，默认约 600×400）
   2. 256-LUT 色卡查表（value → RGBA）
   3. 阈值过滤（value < threshMin 或 > threshMax → alpha=0；null → alpha=0）
   4. createImageBitmap(OffscreenCanvas)
@@ -390,6 +390,8 @@ Worker：
 ---
 
 ## 地图交互
+
+**初始视野**：地图初始 `bounds` 由 `meta.json` 的格点经纬度范围推导（`utils/grid.ts` 的 `computeGridBounds`），不再硬编码中心与缩放级别；换数据集时自动跟随。`initMap` 在 `metaStore.grid` 就绪后才执行（`App.vue` 的 `v-if="!metaStore.isReady"` 加载门保证）。
 
 ### 空间分布模块
 
@@ -452,7 +454,7 @@ Worker：
 
 > Task #2
 
-仅对 `units === 'kg'` 的变量启用。换算公式：`mm = kg / dxy[i][j]`，`dxy` 来自 `/grid/meta.json` 的 `grid.dxy`（shape 15×25，单位 m²）。
+仅对 `units === 'kg'` 的变量启用。换算公式：`mm = kg / dxy[i][j]`，`dxy` 来自 `/grid/meta.json` 的 `grid.dxy`（shape 与 `grid.lat/lon` 一致，如 41×71，单位 m²）。
 
 **状态**
 
@@ -588,22 +590,26 @@ lat = lat_array[i]
 
 | 区域 | fill | 边界线 |
 |------|------|--------|
-| 西藏以外 | 反向遮罩多边形，0.8 暗色 | — |
-| 地市（非选中，全区模式） | 0（透明） | 隐藏 |
-| 地市（非选中，地市模式） | 0.8 暗色 | 隐藏（hover 时全量显现） |
-| 选中地市 | 0（透明，格点完整可见） | 白色 1.5px + 3px 暗晕 |
-| 西藏全区（xizang） | 始终 0 | 白色 1.5px + 3px 暗晕（永远显示） |
+| 全区以外 | 反向遮罩多边形，0.8 暗色 | — |
+| 下级区域（非选中，全区模式） | 0（透明） | 隐藏 |
+| 下级区域（非选中，区域模式） | 0.8 暗色 | 隐藏（hover 时全量显现） |
+| 选中下级区域 | 0（透明，格点完整可见） | 白色 1.5px + 3px 暗晕 |
+| 全区（`OVERALL_REGION_ID`） | 始终 0 | 白色 1.5px + 3px 暗晕（永远显示） |
 
-**Hover 交互**：鼠标进入任意地市区域时，所有地市边界线批量显现（`lineVisible` feature-state），离开时批量隐藏；hovered 区域边界加粗（2px + 4px 暗晕）。
+> 区域 id、全区 id、显示名与边界说明文案统一由 `frontend/src/config/regions.ts` 提供，`useRegionLayer.ts` / `useAdminBoundary.ts` / `SubToolbar.vue` 等不再硬编码 `'xizang'`。
 
-**自动居中**：选中区域变化时调用 `map.fitBounds()`，padding 60px，动画 800ms；进入模块时瞬间定位（duration: 0）。
+**Hover 交互**：鼠标进入任意下级区域时，所有下级区域边界线批量显现（`lineVisible` feature-state），离开时批量隐藏；hovered 区域边界加粗（2px + 4px 暗晕）。
+
+**自动居中**：选中区域变化时调用 `map.fitBounds()`，padding 60px，动画 800ms；进入模块时瞬间定位（duration: 0）。取景范围取「主体包围盒」（`mainBodyBounds()`）：面积最大的多边形，加上面积 ≥ 主体 5% 或中心落在主体外扩 1° 内的多边形。这样海南这类含大量岛礁的行政区不会把视野拽到整个南海，而香港这类碎岛众多的区域仍能完整入镜。几何本身不裁剪，岛礁照常绘制。
 
 **关键实现细节**：
-- 反向遮罩：以 xizang polygon 为"洞"、世界边界框为外环，构造 GeoJSON Polygon，作为独立 source + fill layer
-- `dimmed` feature-state：选中地市时对其余地市批量设为 true（0.8 暗化），回到全区时批量清除
-- `lineVisible` feature-state：hover 进入/离开时对全部 `DISTRICT_IDS` 批量开关
+- 反向遮罩：以全区多边形为"洞"、世界边界框为外环，构造 GeoJSON Polygon，作为独立 source + fill layer
+- **绕向归一化**：外框逆时针、各洞顺时针。MapLibre 按绕向分组环（同向另起多边形、反向算洞），不能依赖数据源绕向 —— 高德原始 GeoJSON 外环为逆时针，shapely 合并输出为顺时针
+- **小环阈值**：面积 < `1e-3` 度²（约 12 km²）的环不参与挖洞。环数过多会让 earcut 产生退化三角形，表现为区域中间横穿一条黑色粗线。已知限制：z10+ 时这类小岛不会被挖亮（边界线仍正常绘制）
+- `dimmed` feature-state：选中下级区域时对其余区域批量设为 true（0.8 暗化），回到全区时批量清除
+- `lineVisible` feature-state：hover 进入/离开时对全部 `SUB_REGION_IDS` 批量开关
 
-**相关文件**：`frontend/src/composables/useRegionLayer.ts`
+**相关文件**：`frontend/src/config/regions.ts`、`frontend/src/composables/useRegionLayer.ts`、`frontend/src/composables/useAdminBoundary.ts`
 
 ---
 
@@ -799,9 +805,12 @@ ProductNav 右端 `⚙` 图标 → 打开设置 Overlay（半透明遮罩 + 面�
 | 设置项 | 类型 | localStorage Key | 持久化粒度 | 默认值 |
 |--------|------|-----------------|-----------|--------|
 | 底图类型 | `BasemapId` | `cwrvis:basemap` | 全局 | `'osm'` |
+| 显示行政边界 | `boolean` | `cwrvis:admin_boundary` | 全局 | `true` |
 | 量程模式 | `'auto' \| 'preset'` | `cwrvis:scale_mode` | 全局 | `'auto'` |
 | Colormap | `ColormapName` | `cwrvis:colormap:{varName}` | 按 var | `'turbo'` |
 | 播放速度 | `number` | `cwrvis:speed:{modeId}` | 按聚合模式 | `1` |
+
+> 行政边界开关在空间分布与区域评估两个模块中同时生效。旧版本 key 为 `cwrvis:xizang_boundary`，改名后旧偏好不会自动迁移（首次升级回到默认 `true`）。
 
 > 图例固定显示在右下角，不提供位置切换。
 
@@ -887,6 +896,7 @@ frontend/src/
 ├── config/
 │   ├── vars.ts                # 所有 var 的元数据与色卡控制点（前端固化配置）
 │   ├── basemaps.ts            # 底图 provider 配置（见上节）
+│   ├── regions.ts             # 区域集合唯一真相源（RegionId / 全区 id / 显示名 / 边界提示）
 │   └── constants.ts           # YEAR_MIN=2000, YEAR_MAX=2025, SEASONS 定义等
 │
 ├── stores/

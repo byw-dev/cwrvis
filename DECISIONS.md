@@ -334,3 +334,60 @@ LeftRail 侧边栏图标语义映射：旧"资源量"图标 → 新"总量"，�
 **原因**：在线版减小包体积，适合网络环境好的场景；离线版保持"无网可用"能力且去掉对 `uv` 的运行时依赖；install.sh 内置让部署降至一条命令；`Type=simple` 是 systemd 推荐用法，更易于监控与日志收集。
 
 **代价/权衡**：需维护两个 Makefile target；离线版固定 Python 3.11，目标机若无此版本需手动安装（Ubuntu 22.04 默认 3.10，需 `apt install python3.11`）。
+
+---
+
+### DEC-020：原始数据按分支变体分目录（`data/{full,xizang,huanan}/nc`）
+
+**状态**：Active
+
+**背景**：工程同时维护 master（完整版全国数据）与 `custom/xizang`、`custom/huanan` 两个区域定制分支。三者共用同一个工作树，而 nc 体积大且 gitignored。早先 master 与 xizang 共用 `data/nc/`，切换分支构建时容易互相覆盖；backport 分支还曾因 `.gitignore` 缺失而把 338 个华南 nc（42.6 MB）误提交进 git。
+
+**决策**：
+
+1. 每个变体使用独立目录：`data/full/nc`（master）、`data/xizang/nc`（custom/xizang）、`data/huanan/nc`（custom/huanan）。
+2. Makefile 的 `NC_DIR` 与脚本 `--nc-dir` 默认值指向当前分支对应目录。
+3. 三个分支的 `.gitignore` 统一忽略这三份目录。
+4. 构建产物（`static/grid/`、`db/stats.db`）仍是单份，切分支后需重新生成。
+
+**原因**：文件系统层面的隔离最省事，脚本与代码不需要为路径做条件分支，也避免「切回 master 时本地数据已被另一变体覆盖」。
+
+**代价/权衡**：磁盘上同时保留三份数据（约 390 MB）；`data/full` 目前只到 2024-12，比区域版少 2025 年，需数据提供方确认是否有意。
+
+---
+
+### DEC-021：脚本只导出白名单变量，并对齐基准格点
+
+**状态**：Active
+
+**背景**：完整版 nc 含 49 个变量（边界通量、初/终值等中间量），前端只用其中 15 个。原实现 `EXCLUDE_VARS = {"dxy"}` 会导出 48 个变量的格点 JSON 与 SQLite 列。另外甲方数据个别年份可能缺行（2025 年曾缺最南一行 16.5°N），`np.stack` 会因形状不一致直接失败。
+
+**决策**：
+
+1. `INCLUDE_VARS` 正向白名单固定 15 个变量，与 `frontend/src/config/vars.ts` 一致；`netcdf_to_json.py` 与 `netcdf_to_sqlite.py` 共用同一份定义。
+2. `_reference_grid()` 扫描全部 nc，取经纬度并集作为基准格点；`_aligned()` 将各帧 `reindex` 到基准网格，缺失格点填 NaN。
+3. `dxy` 从覆盖完整基准格点的样本文件读取；若没有单个文件覆盖并集，取格点最多的文件并打印 WARNING。
+4. `area_weighted` 方法下 kg→mm 的除数取有效格点面积 `Σ(dxy·w)/Σw`，与聚合值量纲（kg/格点）配套；`point_in_boundary` 仍取区域面积。
+
+**原因**：白名单同时约束产物体积、DB 列数和前后端契约；对齐逻辑把「个别年份缺行」从致命错误降级为局部 NaN，面积加权自动忽略这些格点。
+
+**代价/权衡**：白名单是硬编码，新增变量需同时改 `vars.ts`、两个脚本与 `backend/config.py` 的 `KG_VARS`。
+
+---
+
+### DEC-022：区域集合集中配置，视野与遮罩逻辑通用化
+
+**状态**：Active
+
+**背景**：区域 id 原先散落在 `useRegionLayer`、`useXizangBoundary`、`SubToolbar`、`stores/region.ts`、`types/index.ts`，每个定制分支都要改一遍；初始视野硬编码西藏中心/缩放，换数据集即失效；反向遮罩在多岛礁区域会触发 earcut 退化三角形，表现为区域中间横穿黑色粗线。
+
+**决策**：
+
+1. `frontend/src/config/regions.ts` 作为区域集合唯一真相源，导出 `OVERALL_REGION_ID`、`SUB_REGION_IDS`、`ALL_REGION_IDS`、`RegionId`、`OVERALL_LABEL`、`BOUNDARY_HINT`；`types/index.ts` 反向 re-export，避免循环依赖。
+2. `useXizangBoundary` → `useAdminBoundary`；settings 字段 `showXizangBoundary` → `showAdminBoundary`（localStorage key `admin_boundary`）。
+3. 初始视野由 `meta.json` 的格点 bbox 推导；区域取景取「主体包围盒」：面积最大的多边形，加上面积 ≥ 主体 5% 或中心落在主体外扩 1° 内的多边形。
+4. 反向遮罩做绕向归一化（外框逆时针、洞顺时针），并忽略面积 < `1e-3` 度²（约 12 km²）的环。
+
+**原因**：把分支差异收敛到一份配置文件，三个分支可以共用同一套组件与 composable；视野与遮罩规则对西藏、华南数据都成立，不需要分支判断。
+
+**代价/权衡**：`regions.ts` 内容仍由各分支各自维护；旧 localStorage key 不迁移（升级后边界开关回到默认开启一次）；遮罩阈值导致 z10+ 时 <12 km² 的小岛不会被挖亮（已知限制，详见 `docs/design/frontend.md`）。
