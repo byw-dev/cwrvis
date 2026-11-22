@@ -78,8 +78,13 @@ htmlcov/
 .ruff_cache/
 *.log
 
-# 原始 netcdf 数据（体积大，不入库）
-data/nc/
+# 原始 netcdf 数据（体积大，不入库）；按分支变体分目录存放
+#   data/full/nc/   → master（完整版全国网格）
+#   data/xizang/nc/ → custom/xizang
+#   data/huanan/nc/ → custom/huanan（shapes/colorbars 入库）
+data/full/nc/
+data/xizang/nc/
+data/huanan/nc/
 
 # 甲方预生成报告文档（体积大，不入库；需手动放置后运行 make data-reports）
 data/docx/

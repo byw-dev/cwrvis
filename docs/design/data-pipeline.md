@@ -17,7 +17,7 @@
 
 **目录结构：**
 ```
-data/nc/
+data/<variant>/nc/       # full（master）/ xizang / huanan
 ├── yearly/
 │   └── ResultGrid_Y_YYYY-MM-DD-00_YYYY-MM-DD-00.nc
 └── monthly/
@@ -141,12 +141,12 @@ longitude 25 个点：75.5°E → 99.5°E，步长 +1°（西→东）
 ### 执行方式
 
 ```bash
-# 默认路径（nc-dir=data/nc，out-dir=static/grid）—— 从项目根运行
+# 默认路径（nc-dir=data/full/nc，out-dir=static/grid）—— 从项目根运行
 uv run --project scripts python scripts/netcdf_to_json.py
 
 # 显式指定
 uv run --project scripts python scripts/netcdf_to_json.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --out-dir static/grid
 ```
 
@@ -215,14 +215,16 @@ vals = frame_2d[mask & ~np.isnan(frame_2d)]
 value = np.sum(vals) if var_unit == 'kg' else np.mean(vals)
 ```
 
-**区域面积计算（`region_areas` 表）**
+**kg→mm 换算基准面积（`region_areas` 表）**
 
-每种聚合方法在 `prepare()` 阶段一并计算区域有效面积，写入 `region_areas` 表：
+`region_areas.area_m2` 只有一个用途：前端把 kg 值换算成 mm（水深）。因此它必须与该聚合方法 `aggregate()` 的**量纲配套**，两种方法下含义并不相同：
 
-| 方法 | area_m2 计算方式 |
-|------|----------------|
-| `AreaWeightedMean` | `Σ(dxy[i][j] × overlap_ratio[i][j])`，对所有与区域有面积交叉的格点加权求和 |
-| `PointInBoundary` | `Σ(dxy[i][j])` for `mask[i][j] == True`，对中心点在边界内的格点求和 |
+| 方法 | `aggregate()` 量纲 | `mm_divisor_m2()` 计算方式 |
+|------|------------------|--------------------------|
+| `AreaWeightedMean` | kg / 格点（逐格点加权均值） | `Σ(dxy × w) / Σw` —— **有效格点面积** |
+| `PointInBoundary` | kg / 区域（区域内格点求和） | `Σ(dxy[i][j])` for `mask == True` —— **区域面积** |
+
+> ⚠️ 两者混用会得到荒谬结果。此前 `AreaWeightedMean` 错用区域总面积作除数，面积远小于一个 1° 格点的区域会算出十万毫米级的年降水。因为 `make data` 默认走路径 B（`data-sqlite-csv`），该缺陷长期未暴露 —— 只要执行 `make data-sqlite` 就会触发。
 
 `dxy` 数组从 netcdf 文件中读取（与格点 JSON 导出时使用的同一数组，单位 m²）。
 
@@ -326,13 +328,13 @@ ORDER BY season;
 ```bash
 # 默认方法（area_weighted）
 uv run --project scripts python scripts/netcdf_to_sqlite.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --shape-dir data/shapes \
   --db-path db/stats.db
 
 # 切换方法
 uv run --project scripts python scripts/netcdf_to_sqlite.py \
-  --nc-dir data/nc \
+  --nc-dir data/full/nc \
   --shape-dir data/shapes \
   --db-path db/stats_pointin.db \
   --method point_in_boundary
@@ -436,7 +438,7 @@ var 的色卡参数（colorScale、valueMin、valueMax）**不**在 meta.json �
 2. make colorbars      （data/colorbars/ CSV → frontend/src/config/colorbars.ts；CSV 在 git 中，通常只需首次或 CSV 更新后运行）
 3. 生成区域统计 SQLite（二选一）：
    - make data-sqlite-csv  （路径 B：从预计算 CSV 导入，需要 data/csv/ 就绪）
-   - make data-sqlite      （路径 A：从 netcdf 格点空间聚合，需要 data/nc/ 就绪）
+   - make data-sqlite      （路径 A：从 netcdf 格点空间聚合，需要 data/full/nc/ 就绪）
 4. make data-grid      （生成格点 JSON 及 meta.json，需要 netcdf 原始数据）
 5. make data-reports   （data/docx/ → static/reports/，需甲方报告文件就绪）
 6. make frontend       （编译前端，需要 Node.js 环境就绪）

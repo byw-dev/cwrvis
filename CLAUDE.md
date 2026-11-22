@@ -51,7 +51,9 @@ cwrvis/
 │           └── closed.md      # 已修复的 Bug（含根因/方案/技术决策）
 │
 ├── data/
-│   ├── nc/                    # netcdf 原始数据（gitignored，由甲方提供）
+│   ├── full/nc/               # master：完整版 netcdf 原始数据（gitignored，由甲方提供）
+│   ├── xizang/nc/             # custom/xizang：西藏裁切版（gitignored）
+│   ├── huanan/nc/             # custom/huanan：华南裁切版（gitignored）
 │   ├── docx/                  # 预生成报告文档（gitignored，由甲方提供；make data-reports 复制至 static/reports/）
 │   ├── colorbars/             # 各变量色卡量程统计 CSV（在 git 中；make colorbars 生成 frontend/src/config/colorbars.ts）
 │   │   └── {region_id}/       # 每区域一子目录，如 lasa/、xizang/ 等
@@ -126,6 +128,10 @@ cwrvis/
 - **高德底图**：GCJ-02（火星坐标）
 - **从高德开放平台下载的区域 GeoJSON**：GCJ-02，直接可用，无需转换
 - **甲方未来提供的 shape 文件**：需确认坐标系，若为 WGS-84 需转换为 GCJ-02 再使用
+  - ⚠️ **`.prj` 声明不可信**，须实测。已知案例：某批 shapefile 的 `.prj` 写明
+    `GEOGCS["WGS84"...]`，但逐点比对其同名 `.geojson`（高德来源，GCJ-02）后发现
+    坐标完全相同 —— 实为 GCJ-02。判定方法：与已知坐标系的同一区域边界比对顶点，
+    或检查相邻区域的公共边界是否严丝合缝（坐标系混用会出现约 500m 的错位缝隙）
 
 **格点渲染的偏移处理策略**：1 度网格的视觉误差远大于 GCJ-02 偏移量（~500m），因此格点 Canvas 渲染按 WGS-84 正常计算，只在 ImageOverlay 绑定地图坐标时整体做边界框修正，不做逐点转换。
 
