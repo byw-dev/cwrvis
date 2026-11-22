@@ -29,7 +29,7 @@ netcdf × shape → SQLite 区域统计数据库。
 用法：
   uv run python scripts/netcdf_to_sqlite.py
   uv run python scripts/netcdf_to_sqlite.py \\
-      --nc-dir data/nc --shape-dir data/shapes \\
+      --nc-dir data/full/nc --shape-dir data/shapes \\
       --db-path db/stats.db --method area_weighted
 
 依赖：numpy xarray netCDF4 shapely
@@ -64,7 +64,13 @@ REGION_MAP: dict[str, str] = {
     "ali":     "阿里地区",
 }
 
-EXCLUDE_VARS = {"dxy"}
+# 系统支持的 15 个变量（与 frontend/src/config/vars.ts 保持一致）。
+# 采用正向白名单而非反向排除：部分数据集的 nc 含数十个中间变量（边界通量、
+# 初/终值等），前端并不使用，全量导出会让产物体积和 DB 列数无谓膨胀。
+INCLUDE_VARS = frozenset({
+    "SP", "aveMv", "aveMh", "INv", "OTv", "INh", "OTh",
+    "MC", "GMh", "GMv", "CWR", "CEv", "PEh", "RCv", "RCh",
+})
 
 # PointInBoundary：这些 var 的单位是 kg，区域统计取 SUM；其余取算术平均
 KG_VARS = frozenset({
@@ -199,13 +205,57 @@ def _scan_files(
     return yearly, monthly
 
 
+def _reference_grid(paths) -> tuple[list[float], list[float], Path]:
+    """
+    扫描全部 nc，返回 (基准 lat 降序, 基准 lon 升序, 覆盖基准格点的样本文件)。
+
+    甲方数据可能出现个别年份缺行的情况（如 2025 年缺最南一行 16.5°N），
+    直接 np.stack 会因形状不一致报错。取并集作为基准格点，各帧 reindex 后
+    缺失处为 NaN —— 面积加权时 NaN 单元不计权重，格点图上留空。
+
+    样本文件须自身就覆盖完整基准格点：meta 的 dxy（格点面积）从它读取，
+    若取到缺行的文件，reindex 出来的 dxy 会带 NaN 行。
+    """
+    lats: set[float] = set()
+    lons: set[float] = set()
+    coords: dict[Path, tuple[list[float], list[float]]] = {}
+    for path in paths:
+        with xr.open_dataset(path) as ds:
+            la = [float(v) for v in ds.coords["latitude"].values]
+            lo = [float(v) for v in ds.coords["longitude"].values]
+        coords[path] = (la, lo)
+        lats.update(la)
+        lons.update(lo)
+
+    ref_lats, ref_lons = sorted(lats, reverse=True), sorted(lons)
+    for path, (la, lo) in coords.items():
+        if la == ref_lats and lo == ref_lons:
+            return ref_lats, ref_lons, path
+
+    # 没有任何单个文件覆盖完整并集：退而取格点最多的一个，dxy 可能带 NaN
+    widest = max(coords, key=lambda p: len(coords[p][0]) * len(coords[p][1]))
+    print(f"  WARNING: 无单个 nc 覆盖完整基准格点，dxy 取自 {widest.name}（可能含 NaN 行）")
+    return ref_lats, ref_lons, widest
+
+
+def _aligned(ds: xr.Dataset, ref_lats: list[float], ref_lons: list[float]) -> xr.Dataset:
+    """把数据集重投影到基准格点，缺失格点填 NaN。已对齐时为无操作。"""
+    if (list(ds.coords["latitude"].values) == ref_lats
+            and list(ds.coords["longitude"].values) == ref_lons):
+        return ds
+    return ds.reindex(latitude=ref_lats, longitude=ref_lons)
+
+
 def _read_grid_meta(
     sample_path: Path,
+    ref_lats: list[float],
+    ref_lons: list[float],
 ) -> tuple[list[float], list[float], list[str], np.ndarray]:
     with xr.open_dataset(sample_path) as ds:
+        ds = _aligned(ds, ref_lats, ref_lons)
         lats = [float(v) for v in ds.coords["latitude"].values]
         lons = [float(v) for v in ds.coords["longitude"].values]
-        var_names = [v for v in ds.data_vars if v not in EXCLUDE_VARS]
+        var_names = [v for v in ds.data_vars if v in INCLUDE_VARS]
         dxy = ds["dxy"].values.astype(float)  # shape (lat, lon)，单位 m²
     return lats, lons, var_names, dxy
 
@@ -217,6 +267,8 @@ def _read_grid_meta(
 def _load_frames(
     files: dict,
     var_names: list[str],
+    ref_lats: list[float],
+    ref_lons: list[float],
 ) -> dict:
     """
     返回 {key: {var: np.ndarray shape (lat, lon)}}，key 为 year 或 (year, month)。
@@ -227,6 +279,7 @@ def _load_frames(
     for idx, (key, path) in enumerate(sorted_items, 1):
         print(f"  [{idx:>3}/{total}] {path.name}", flush=True)
         with xr.open_dataset(path) as ds:
+            ds = _aligned(ds, ref_lats, ref_lons)
             data[key] = {var: ds[var].values.astype(float) for var in var_names}
     return data
 
@@ -335,7 +388,7 @@ def _insert_rows(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="netcdf × shape → SQLite 区域统计")
-    parser.add_argument("--nc-dir",    default="data/nc",     type=Path, metavar="DIR")
+    parser.add_argument("--nc-dir",    default="data/full/nc", type=Path, metavar="DIR")
     parser.add_argument("--shape-dir", default="data/shapes", type=Path, metavar="DIR")
     parser.add_argument("--db-path",   default="db/stats.db", type=Path, metavar="FILE")
     parser.add_argument(
@@ -352,8 +405,11 @@ def main() -> None:
     if not yearly and not monthly:
         sys.exit(f"ERROR: {args.nc_dir} 下未找到 nc 文件")
 
-    sample = next(iter(yearly.values())) if yearly else next(iter(monthly.values()))
-    lats, lons, var_names, dxy = _read_grid_meta(sample)
+    all_paths = list(yearly.values()) + list(monthly.values())
+    ref_lats, ref_lons, sample = _reference_grid(all_paths)
+    print(f"基准格点：{len(ref_lats)} lat × {len(ref_lons)} lon  (样本 {sample.name})")
+
+    lats, lons, var_names, dxy = _read_grid_meta(sample, ref_lats, ref_lons)
     print(
         f"grid: {len(lats)}×{len(lons)}  "
         f"vars({len(var_names)}): {var_names}\n"
@@ -369,10 +425,10 @@ def main() -> None:
 
     # ---- load all nc frames into memory ----
     print(f"\nloading yearly frames ({len(yearly)} files)...")
-    yearly_data = _load_frames(yearly, var_names)
+    yearly_data = _load_frames(yearly, var_names, ref_lats, ref_lons)
 
     print(f"\nloading monthly frames ({len(monthly)} files)...")
-    monthly_data = _load_frames(monthly, var_names)
+    monthly_data = _load_frames(monthly, var_names, ref_lats, ref_lons)
 
     # ---- init db ----
     print(f"\ninitialising {args.db_path}  (method={args.method})...")
